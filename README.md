@@ -26,6 +26,8 @@ php artisan audit:analyze --no-tools
 
 The command returns a non-zero exit code when an issue meets the configured `fail_on` threshold.
 
+When Larastan is installed in the target project and no `phpstan.neon` / `phpstan.neon.dist` exists, the PHPStan runner automatically generates a temporary Larastan configuration using `laravel-audit.paths` and `tools.phpstan.level`. Disable this with `tools.phpstan.auto_larastan => false` or `LARAVEL_AUDIT_PHPSTAN_AUTO_LARASTAN=false`.
+
 ## Built-In Categories
 
 - `security`: raw SQL, mass assignment, weak validation, debug defaults.

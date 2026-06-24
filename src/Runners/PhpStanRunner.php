@@ -11,28 +11,141 @@ use LaravelAudit\Analysis\Severity;
 
 final class PhpStanRunner extends AbstractProcessRunner
 {
+    public function __construct(
+        private readonly PhpStanConfigurationFactory $configurationFactory = new PhpStanConfigurationFactory,
+    ) {}
+
     /**
-     * @param  array{binary?: string, arguments?: list<string>}  $config
+     * @param  array{binary?: string, arguments?: list<string>, paths?: list<string>, auto_larastan?: bool, level?: int}  $config
      */
     public function run(string $basePath, array $config): ToolResult
     {
         $binary = $config['binary'] ?? 'vendor/bin/phpstan';
+        /** @var list<string> $temporaryConfigs */
+        $temporaryConfigs = [];
+
+        try {
+            $arguments = $this->arguments($basePath, $config, $temporaryConfigs);
+
+            if (! $this->binaryAvailable($basePath, $binary)) {
+                return new ToolResult('phpstan', false, 127, output: 'PHPStan binary was not found.');
+            }
+
+            $process = $this->runProcess($basePath, $binary, $arguments);
+            $jsonOutput = trim($process->getOutput());
+            $output = trim($jsonOutput.PHP_EOL.$process->getErrorOutput());
+
+            return new ToolResult(
+                tool: 'phpstan',
+                available: true,
+                exitCode: $process->getExitCode() ?? 1,
+                issues: $this->issuesFromOutput($jsonOutput !== '' ? $jsonOutput : $output),
+                output: $output,
+            );
+        } finally {
+            foreach ($temporaryConfigs as $configPath) {
+                @unlink($configPath);
+            }
+        }
+    }
+
+    /**
+     * @param  array{arguments?: list<string>, paths?: list<string>, auto_larastan?: bool, level?: int}  $config
+     * @param  list<string>  $temporaryConfigs
+     * @return list<string>
+     */
+    private function arguments(string $basePath, array $config, array &$temporaryConfigs): array
+    {
         $arguments = $config['arguments'] ?? ['analyse', '--error-format=json'];
 
-        if (! $this->binaryAvailable($basePath, $binary)) {
-            return new ToolResult('phpstan', false, 127, output: 'PHPStan binary was not found.');
+        if ($this->configurationFactory->projectConfigPath($basePath) !== null) {
+            return $arguments;
         }
 
-        $process = $this->runProcess($basePath, $binary, $arguments);
-        $output = trim($process->getOutput().PHP_EOL.$process->getErrorOutput());
+        if ($this->hasExplicitConfiguration($arguments) || $this->hasExplicitAnalysisPath($arguments)) {
+            return $arguments;
+        }
 
-        return new ToolResult(
-            tool: 'phpstan',
-            available: true,
-            exitCode: $process->getExitCode() ?? 1,
-            issues: $this->issuesFromOutput($output),
-            output: $output,
-        );
+        if ($this->shouldUseLarastan($basePath, $config)) {
+            $configPath = $this->configurationFactory->createLarastanConfig(
+                $basePath,
+                $config['paths'] ?? [],
+                (int) ($config['level'] ?? 5),
+            );
+            $temporaryConfigs[] = $configPath;
+
+            return [
+                ...$arguments,
+                '--configuration='.$configPath,
+            ];
+        }
+
+        return [
+            ...$arguments,
+            ...$this->existingProjectPaths($basePath, $config['paths'] ?? []),
+        ];
+    }
+
+    /**
+     * @param  array{auto_larastan?: bool}  $config
+     */
+    private function shouldUseLarastan(string $basePath, array $config): bool
+    {
+        if (($config['auto_larastan'] ?? true) === false) {
+            return false;
+        }
+
+        return $this->configurationFactory->larastanExtensionPath($basePath) !== null;
+    }
+
+    /**
+     * @param  list<string>  $arguments
+     */
+    private function hasExplicitConfiguration(array $arguments): bool
+    {
+        foreach ($arguments as $argument) {
+            if ($argument === '-c' || $argument === '--configuration' || str_starts_with($argument, '--configuration=')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  list<string>  $arguments
+     */
+    private function hasExplicitAnalysisPath(array $arguments): bool
+    {
+        $analyseSeen = false;
+
+        foreach ($arguments as $argument) {
+            if ($argument === 'analyse' || $argument === 'analyze') {
+                $analyseSeen = true;
+
+                continue;
+            }
+
+            if (! $analyseSeen || str_starts_with($argument, '-')) {
+                continue;
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  list<string>  $paths
+     * @return list<string>
+     */
+    private function existingProjectPaths(string $basePath, array $paths): array
+    {
+        return array_values(array_filter(
+            $paths,
+            fn (string $path): bool => file_exists($basePath.DIRECTORY_SEPARATOR.$path),
+        ));
     }
 
     /**

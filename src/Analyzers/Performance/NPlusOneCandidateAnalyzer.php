@@ -34,13 +34,17 @@ final class NPlusOneCandidateAnalyzer extends BaseAnalyzer implements AnalyzerIn
             $lines = preg_split('/\R/', $file->contents) ?: [];
 
             foreach ($lines as $index => $line) {
-                if (preg_match('/foreach\s*\(.+\s+as\s+\$\w+/', $line) !== 1) {
+                if (preg_match('/foreach\s*\([^)]+\s+as\s+\$\w+/', $line) !== 1) {
+                    continue;
+                }
+
+                if ($this->isQueryBuilderMacroContext($lines, $index)) {
                     continue;
                 }
 
                 $window = implode("\n", array_slice($lines, $index, 20));
 
-                if (preg_match('/\$\w+->\w+(?!\s*\()/', $window) === 1 && preg_match('/with\(|load\(/', $window) !== 1) {
+                if ($this->hasRelationshipPropertyAccess($window) && preg_match('/with\(|load\(/', $window) !== 1) {
                     $issues[] = $this->issue(
                         $this->id(),
                         $this->category(),
@@ -56,5 +60,20 @@ final class NPlusOneCandidateAnalyzer extends BaseAnalyzer implements AnalyzerIn
         }
 
         return $issues;
+    }
+
+    /**
+     * @param  list<string>  $lines
+     */
+    private function isQueryBuilderMacroContext(array $lines, int $index): bool
+    {
+        $context = implode("\n", array_slice($lines, max(0, $index - 15), 16));
+
+        return preg_match('/\b(?:Builder|Eloquent\\Builder|Query\\Builder)::macro\s*\(/', $context) === 1;
+    }
+
+    private function hasRelationshipPropertyAccess(string $window): bool
+    {
+        return preg_match('/\$\w+->\w++(?!\s*\()/', $window) === 1;
     }
 }

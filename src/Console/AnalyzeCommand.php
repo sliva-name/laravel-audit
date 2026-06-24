@@ -50,7 +50,13 @@ final class AnalyzeCommand extends Command
             }
 
             if ((bool) data_get($config, 'tools.phpstan.enabled', true)) {
-                $toolResults[] = $phpstan->run($basePath, data_get($config, 'tools.phpstan', []));
+                $phpstanConfig = data_get($config, 'tools.phpstan', []);
+
+                if (is_array($phpstanConfig)) {
+                    $phpstanConfig['paths'] = $config['paths'] ?? [];
+                }
+
+                $toolResults[] = $phpstan->run($basePath, is_array($phpstanConfig) ? $phpstanConfig : []);
             }
 
             foreach ($toolResults as $toolResult) {

@@ -26,6 +26,7 @@ use LaravelAudit\Analyzers\Security\RawSqlAnalyzer;
 use LaravelAudit\Analyzers\Security\WeakValidationAnalyzer;
 use LaravelAudit\Console\AnalyzeCommand;
 use LaravelAudit\Project\ProjectScanner;
+use LaravelAudit\Runners\PhpStanConfigurationFactory;
 use LaravelAudit\Runners\PhpStanRunner;
 use LaravelAudit\Runners\PintRunner;
 
@@ -37,6 +38,7 @@ final class AuditServiceProvider extends ServiceProvider
 
         $this->app->singleton(ProjectScanner::class);
         $this->app->singleton(PintRunner::class);
+        $this->app->singleton(PhpStanConfigurationFactory::class);
         $this->app->singleton(PhpStanRunner::class);
 
         $this->app->singleton(AnalyzerRegistry::class, function (): AnalyzerRegistry {

@@ -28,6 +28,8 @@ return [
             'enabled' => true,
             'binary' => env('LARAVEL_AUDIT_PHPSTAN_BINARY', 'vendor/bin/phpstan'),
             'arguments' => ['analyse', '--error-format=json'],
+            'auto_larastan' => env('LARAVEL_AUDIT_PHPSTAN_AUTO_LARASTAN', true),
+            'level' => (int) env('LARAVEL_AUDIT_PHPSTAN_LEVEL', 5),
         ],
     ],
 
