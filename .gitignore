@@ -1,0 +1,8 @@
+/vendor/
+/.idea/
+/.phpunit.result.cache
+/.phpunit.cache/
+
+.env
+.env.*
+!.env.example
