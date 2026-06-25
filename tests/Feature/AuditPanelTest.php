@@ -4,13 +4,36 @@ declare(strict_types=1);
 
 namespace LaravelAudit\Tests\Feature;
 
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use LaravelAudit\Models\AuditReportRecord;
+use LaravelAudit\Audit\AuditOptions;
+use LaravelAudit\Reporting\AuditReport;
+use LaravelAudit\Repositories\FileAuditReportStore;
 use LaravelAudit\Tests\TestCase;
 
 final class AuditPanelTest extends TestCase
 {
-    use RefreshDatabase;
+    private string $reportsDirectory;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->reportsDirectory = sys_get_temp_dir().'/laravel-audit-panel-'.uniqid('', true);
+        $this->app['config']->set('laravel-audit.dashboard.storage', 'file');
+        $this->app['config']->set('laravel-audit.dashboard.storage_path', $this->reportsDirectory);
+    }
+
+    protected function tearDown(): void
+    {
+        foreach (glob($this->reportsDirectory.'/*.json') ?: [] as $file) {
+            unlink($file);
+        }
+
+        if (is_dir($this->reportsDirectory)) {
+            rmdir($this->reportsDirectory);
+        }
+
+        parent::tearDown();
+    }
 
     public function test_dashboard_is_accessible(): void
     {
@@ -22,50 +45,42 @@ final class AuditPanelTest extends TestCase
 
     public function test_reports_index_lists_saved_reports(): void
     {
-        AuditReportRecord::query()->create([
-            'uuid' => '11111111-1111-1111-1111-111111111111',
-            'critical_count' => 0,
-            'error_count' => 1,
-            'warning_count' => 2,
-            'info_count' => 0,
-            'issues_count' => 3,
-            'pattern_count' => 0,
-            'duration_seconds' => 1.25,
-            'payload' => ['issues' => [], 'patternSuggestions' => []],
-            'options' => ['no_tools' => true],
-        ]);
+        $store = new FileAuditReportStore($this->reportsDirectory);
+        $snapshot = $store->store(new AuditReport(issues: [], toolResults: [], durationSeconds: 1.25), new AuditOptions(noTools: true));
 
         $this->get('/audit/reports')
             ->assertOk()
-            ->assertSee('11111111-1111-1111-1111-111111111111');
+            ->assertSee($snapshot->uuid);
     }
 
     public function test_report_show_displays_details(): void
     {
-        AuditReportRecord::query()->create([
-            'uuid' => '22222222-2222-2222-2222-222222222222',
-            'critical_count' => 0,
-            'error_count' => 1,
-            'warning_count' => 0,
-            'info_count' => 0,
-            'issues_count' => 1,
-            'pattern_count' => 0,
-            'duration_seconds' => 0.5,
-            'payload' => [
-                'issues' => [[
-                    'ruleId' => 'security.raw-sql',
-                    'severity' => 'error',
-                    'title' => 'Raw SQL usage',
-                    'message' => 'Avoid raw SQL in controllers.',
-                    'location' => ['file' => 'app/Http/Controllers/Foo.php', 'line' => 10],
-                    'recommendation' => 'Use Eloquent.',
-                ]],
-                'patternSuggestions' => [],
-            ],
-            'options' => ['no_tools' => true],
-        ]);
+        $store = new FileAuditReportStore($this->reportsDirectory);
+        $snapshot = $store->store(new AuditReport(
+            issues: [],
+            toolResults: [],
+            durationSeconds: 0.5,
+        ), new AuditOptions(noTools: true));
 
-        $this->get('/audit/reports/22222222-2222-2222-2222-222222222222')
+        file_put_contents(
+            $this->reportsDirectory.'/'.$snapshot->uuid.'.json',
+            json_encode([
+                ...$snapshot->toArray(),
+                'payload' => [
+                    'issues' => [[
+                        'ruleId' => 'security.raw-sql',
+                        'severity' => 'error',
+                        'title' => 'Raw SQL usage',
+                        'message' => 'Avoid raw SQL in controllers.',
+                        'location' => ['file' => 'app/Http/Controllers/Foo.php', 'line' => 10],
+                        'recommendation' => 'Use Eloquent.',
+                    ]],
+                    'patternSuggestions' => [],
+                ],
+            ], JSON_THROW_ON_ERROR),
+        );
+
+        $this->get('/audit/reports/'.$snapshot->uuid)
             ->assertOk()
             ->assertSee('Raw SQL usage')
             ->assertSee('app/Http/Controllers/Foo.php');
@@ -77,6 +92,6 @@ final class AuditPanelTest extends TestCase
             'no_tools' => '1',
         ])->assertRedirect();
 
-        $this->assertDatabaseCount('audit_reports', 1);
+        $this->assertCount(1, glob($this->reportsDirectory.'/*.json') ?: []);
     }
 }

@@ -45,6 +45,9 @@ use LaravelAudit\Pattern\PatternInferenceEngine;
 use LaravelAudit\Pattern\PatternModel;
 use LaravelAudit\Project\ProjectScanner;
 use LaravelAudit\Repositories\AuditReportRepository;
+use LaravelAudit\Repositories\Contracts\AuditReportStore;
+use LaravelAudit\Repositories\DatabaseAuditReportStore;
+use LaravelAudit\Repositories\FileAuditReportStore;
 use LaravelAudit\Runners\PhpStanConfigurationFactory;
 use LaravelAudit\Runners\PhpStanRunner;
 use LaravelAudit\Runners\PintRunner;
@@ -99,7 +102,21 @@ final class AuditServiceProvider extends ServiceProvider
         $this->app->singleton(PatternAdvisorFactory::class);
 
         $this->app->singleton(AuditEngine::class);
-        $this->app->singleton(AuditReportRepository::class);
+        $this->app->singleton(AuditReportStore::class, function ($app): AuditReportStore {
+            $driver = (string) config('laravel-audit.dashboard.storage', 'file');
+
+            if ($driver === 'database') {
+                return $app->make(DatabaseAuditReportStore::class);
+            }
+
+            $path = config('laravel-audit.dashboard.storage_path');
+
+            return new FileAuditReportStore(is_string($path) && $path !== '' ? $path : storage_path('app/laravel-audit/reports'));
+        });
+
+        $this->app->singleton(AuditReportRepository::class, fn ($app): AuditReportRepository => new AuditReportRepository(
+            $app->make(AuditReportStore::class),
+        ));
 
         $this->app->singleton(AnalyzerRegistry::class, function (): AnalyzerRegistry {
             return new AnalyzerRegistry([
@@ -146,7 +163,10 @@ final class AuditServiceProvider extends ServiceProvider
         if ((bool) config('laravel-audit.dashboard.enabled', true)) {
             $this->loadRoutesFrom(__DIR__.'/../routes/audit.php');
             $this->loadViewsFrom(__DIR__.'/../resources/views', 'laravel-audit');
-            $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+
+            if (config('laravel-audit.dashboard.storage', 'file') === 'database') {
+                $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+            }
         }
 
         if ($this->app->runningInConsole()) {

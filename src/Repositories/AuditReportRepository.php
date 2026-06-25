@@ -4,50 +4,32 @@ declare(strict_types=1);
 
 namespace LaravelAudit\Repositories;
 
-use Illuminate\Support\Str;
 use LaravelAudit\Audit\AuditOptions;
-use LaravelAudit\Models\AuditReportRecord;
+use LaravelAudit\Models\AuditReportSnapshot;
 use LaravelAudit\Reporting\AuditReport;
+use LaravelAudit\Repositories\Contracts\AuditReportStore;
 
 final class AuditReportRepository
 {
-    public function store(AuditReport $report, AuditOptions $options): AuditReportRecord
-    {
-        $summary = $report->summary();
+    public function __construct(
+        private readonly AuditReportStore $store,
+    ) {}
 
-        return AuditReportRecord::query()->create([
-            'uuid' => (string) Str::uuid(),
-            'critical_count' => $summary['critical'] ?? 0,
-            'error_count' => $summary['error'] ?? 0,
-            'warning_count' => $summary['warning'] ?? 0,
-            'info_count' => $summary['info'] ?? 0,
-            'issues_count' => count($report->issues),
-            'pattern_count' => count($report->patternSuggestions),
-            'duration_seconds' => $report->durationSeconds,
-            'payload' => $report->toArray(),
-            'options' => $options->toArray(),
-        ]);
+    public function store(AuditReport $report, AuditOptions $options): AuditReportSnapshot
+    {
+        return $this->store->store($report, $options);
     }
 
     /**
-     * @return list<AuditReportRecord>
+     * @return list<AuditReportSnapshot>
      */
     public function latest(int $limit = 50): array
     {
-        /** @var list<AuditReportRecord> $reports */
-        $reports = AuditReportRecord::query()
-            ->latest()
-            ->limit($limit)
-            ->get()
-            ->all();
-
-        return $reports;
+        return $this->store->latest($limit);
     }
 
-    public function findByUuid(string $uuid): ?AuditReportRecord
+    public function findByUuid(string $uuid): ?AuditReportSnapshot
     {
-        return AuditReportRecord::query()
-            ->where('uuid', $uuid)
-            ->first();
+        return $this->store->findByUuid($uuid);
     }
 }

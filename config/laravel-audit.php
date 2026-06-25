@@ -42,6 +42,8 @@ return [
         'enabled' => env('LARAVEL_AUDIT_DASHBOARD', true),
         'path' => env('LARAVEL_AUDIT_DASHBOARD_PATH', 'audit'),
         'middleware' => ['web'],
+        'storage' => env('LARAVEL_AUDIT_DASHBOARD_STORAGE', 'file'),
+        'storage_path' => env('LARAVEL_AUDIT_DASHBOARD_STORAGE_PATH'),
     ],
 
     'thresholds' => [
