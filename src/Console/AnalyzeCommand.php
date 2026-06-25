@@ -8,6 +8,7 @@ use Illuminate\Console\Command;
 use LaravelAudit\Analysis\AnalysisContext;
 use LaravelAudit\Analysis\AnalyzerRegistry;
 use LaravelAudit\Analysis\Severity;
+use LaravelAudit\Pattern\PatternAdvisorFactory;
 use LaravelAudit\Project\ProjectScanner;
 use LaravelAudit\Reporting\AuditReport;
 use LaravelAudit\Reporting\ConsoleReporter;
@@ -22,7 +23,9 @@ final class AnalyzeCommand extends Command
         {--format=console : Output format: console, json, or sarif}
         {--fail-on= : Minimum severity that should produce a non-zero exit code}
         {--only= : Comma-separated analyzer categories to run}
-        {--no-tools : Skip Pint and PHPStan runners}';
+        {--no-tools : Skip Pint and PHPStan runners}
+        {--patterns : Score refactoring patterns with the weighted heuristic model}
+        {--llm : Confirm heuristic pattern hypotheses against method source code}';
 
     protected $description = 'Analyze a Laravel project with Pint, PHPStan/Larastan, and Laravel-specific audit rules.';
 
@@ -31,6 +34,7 @@ final class AnalyzeCommand extends Command
         AnalyzerRegistry $registry,
         PintRunner $pint,
         PhpStanRunner $phpstan,
+        PatternAdvisorFactory $patternAdvisorFactory,
     ): int {
         $startedAt = microtime(true);
         $config = config('laravel-audit', []);
@@ -64,10 +68,20 @@ final class AnalyzeCommand extends Command
             }
         }
 
+        $patternSuggestions = [];
+
+        if ($this->shouldInferPatterns($config)) {
+            $useLlm = (bool) $this->option('llm') || (bool) data_get($config, 'patterns.llm.enabled', false);
+            $useHeuristic = (bool) $this->option('patterns') || (bool) data_get($config, 'patterns.enabled', false);
+            $patternAdvisor = $patternAdvisorFactory->make($config, $useHeuristic, $useLlm);
+            $patternSuggestions = $patternAdvisor->suggest($context->project, $issues);
+        }
+
         $report = new AuditReport(
             issues: $issues,
             toolResults: $toolResults,
             durationSeconds: microtime(true) - $startedAt,
+            patternSuggestions: $patternSuggestions,
         );
 
         $this->renderReport($report);
@@ -114,5 +128,18 @@ final class AnalyzeCommand extends Command
         }
 
         (new ConsoleReporter)->render($this, $report);
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     */
+    private function shouldInferPatterns(array $config): bool
+    {
+        if ($this->option('patterns') || $this->option('llm')) {
+            return true;
+        }
+
+        return (bool) data_get($config, 'patterns.enabled', false)
+            || (bool) data_get($config, 'patterns.llm.enabled', false);
     }
 }

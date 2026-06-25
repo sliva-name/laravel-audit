@@ -1,0 +1,132 @@
+{
+    "feature_scaling": {
+        "lines": { "max": 120 },
+        "nesting_depth": { "max": 6 },
+        "switch_branches": { "max": 8 },
+        "elseif_chain": { "max": 6 },
+        "instanceof_checks": { "max": 5 },
+        "app_resolver_calls": { "max": 4 },
+        "manual_instantiations": { "max": 4 },
+        "db_calls": { "max": 6 },
+        "validate_calls": { "max": 3 },
+        "parameter_count": { "max": 8 },
+        "return_statements": { "max": 8 },
+        "try_catch_blocks": { "max": 3 },
+        "foreach_loops": { "max": 5 }
+    },
+    "patterns": {
+        "strategy": {
+            "title": "Strategy",
+            "description": "Replace type-based branching with interchangeable handler objects.",
+            "recommendation": "Extract each branch into a handler class and resolve it through match, a registry, or the container.",
+            "bias": -1.4,
+            "weights": {
+                "switch_branches": 2.8,
+                "elseif_chain": 2.0,
+                "instanceof_checks": 2.2
+            }
+        },
+        "action": {
+            "title": "Action / Use Case",
+            "description": "Move orchestration out of the controller into a single-purpose action class.",
+            "recommendation": "Create an invokable action or use-case class and keep the controller thin.",
+            "bias": -1.8,
+            "weights": {
+                "lines": 1.8,
+                "db_calls": 1.6,
+                "validate_calls": 1.2,
+                "return_statements": 0.8,
+                "is_controller_method": 2.5
+            }
+        },
+        "repository": {
+            "title": "Repository",
+            "description": "Isolate persistence queries behind a dedicated repository layer.",
+            "recommendation": "Move query builder and Eloquent access into a repository consumed by actions or services.",
+            "bias": -1.6,
+            "weights": {
+                "db_calls": 2.4,
+                "lines": 1.0,
+                "is_controller_method": 1.8
+            }
+        },
+        "value_object": {
+            "title": "Value Object / DTO",
+            "description": "Replace loosely typed parameter groups with a dedicated value object.",
+            "recommendation": "Introduce a readonly DTO or value object when several primitives travel together.",
+            "bias": -2.0,
+            "weights": {
+                "parameter_count": 2.2,
+                "lines": 0.8
+            }
+        },
+        "guard_clauses": {
+            "title": "Guard Clauses",
+            "description": "Flatten nested conditionals with early returns and preconditions.",
+            "recommendation": "Invert conditions and return early before the main happy-path logic.",
+            "bias": -1.5,
+            "weights": {
+                "nesting_depth": 2.8,
+                "return_statements": 1.0
+            }
+        },
+        "extract_method": {
+            "title": "Extract Method",
+            "description": "Split a long method into smaller private methods with clear names.",
+            "recommendation": "Extract cohesive blocks into private methods or dedicated classes.",
+            "bias": -1.7,
+            "weights": {
+                "lines": 2.5,
+                "nesting_depth": 1.5,
+                "foreach_loops": 0.8,
+                "try_catch_blocks": 0.6
+            }
+        },
+        "dependency_injection": {
+            "title": "Constructor Dependency Injection",
+            "description": "Replace service location and manual instantiation with injected dependencies.",
+            "recommendation": "Inject dependencies through the constructor and let Laravel resolve them from the container.",
+            "bias": -1.3,
+            "weights": {
+                "app_resolver_calls": 2.6,
+                "manual_instantiations": 2.4
+            }
+        },
+        "form_request": {
+            "title": "Form Request",
+            "description": "Move inline validation into a dedicated Form Request class.",
+            "recommendation": "Create a Form Request with rules() and authorize() instead of validating inside the controller.",
+            "bias": -1.8,
+            "weights": {
+                "validate_calls": 2.8,
+                "is_controller_method": 2.0
+            }
+        }
+    },
+    "finding_boosts": {
+        "code-quality.nesting-depth": {
+            "guard_clauses": 0.12,
+            "extract_method": 0.10
+        },
+        "code-quality.long-method": {
+            "extract_method": 0.15,
+            "action": 0.08
+        },
+        "best-practices.fat-controller": {
+            "action": 0.15,
+            "repository": 0.08
+        },
+        "best-practices.logic-in-routes": {
+            "action": 0.12
+        },
+        "best-practices.missing-form-request": {
+            "form_request": 0.15
+        },
+        "best-practices.silent-failure": {
+            "extract_method": 0.05
+        },
+        "performance.n-plus-one-candidate": {
+            "repository": 0.10
+        }
+    }
+}

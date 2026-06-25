@@ -7,9 +7,12 @@ namespace LaravelAudit;
 use Illuminate\Support\ServiceProvider;
 use LaravelAudit\Analysis\AnalyzerRegistry;
 use LaravelAudit\Analyzers\BestPractices\FatControllerAnalyzer;
+use LaravelAudit\Analyzers\BestPractices\LogicInRoutesAnalyzer;
 use LaravelAudit\Analyzers\BestPractices\MissingFormRequestAnalyzer;
+use LaravelAudit\Analyzers\BestPractices\SilentFailureAnalyzer;
 use LaravelAudit\Analyzers\CodeQuality\LargeClassAnalyzer;
 use LaravelAudit\Analyzers\CodeQuality\LongMethodAnalyzer;
+use LaravelAudit\Analyzers\CodeQuality\NestingDepthAnalyzer;
 use LaravelAudit\Analyzers\CodeQuality\RedundantBooleanReturnAnalyzer;
 use LaravelAudit\Analyzers\CodeQuality\RedundantCatchRethrowAnalyzer;
 use LaravelAudit\Analyzers\CodeQuality\RedundantElseAfterExitAnalyzer;
@@ -19,12 +22,26 @@ use LaravelAudit\Analyzers\CodeQuality\RedundantTypeGuardAnalyzer;
 use LaravelAudit\Analyzers\Performance\NPlusOneCandidateAnalyzer;
 use LaravelAudit\Analyzers\Performance\SyncHeavyJobAnalyzer;
 use LaravelAudit\Analyzers\Reliability\EnvAccessOutsideConfigAnalyzer;
+use LaravelAudit\Analyzers\Reliability\GlobalVariablesAnalyzer;
 use LaravelAudit\Analyzers\Reliability\MissingTransactionAnalyzer;
+use LaravelAudit\Analyzers\Security\CommandInjectionAnalyzer;
 use LaravelAudit\Analyzers\Security\DebugConfigurationAnalyzer;
+use LaravelAudit\Analyzers\Security\EvalUsageAnalyzer;
+use LaravelAudit\Analyzers\Security\HardcodedCredentialsAnalyzer;
 use LaravelAudit\Analyzers\Security\MassAssignmentAnalyzer;
 use LaravelAudit\Analyzers\Security\RawSqlAnalyzer;
+use LaravelAudit\Analyzers\Security\UnguardedModelAnalyzer;
 use LaravelAudit\Analyzers\Security\WeakValidationAnalyzer;
 use LaravelAudit\Console\AnalyzeCommand;
+use LaravelAudit\Pattern\HeuristicPatternAdvisor;
+use LaravelAudit\Pattern\JsonHttpClient;
+use LaravelAudit\Pattern\LlmPatternAdvisor;
+use LaravelAudit\Pattern\MethodFeatureExtractor;
+use LaravelAudit\Pattern\MethodReviewQueue;
+use LaravelAudit\Pattern\MethodSnippetExtractor;
+use LaravelAudit\Pattern\PatternAdvisorFactory;
+use LaravelAudit\Pattern\PatternInferenceEngine;
+use LaravelAudit\Pattern\PatternModel;
 use LaravelAudit\Project\ProjectScanner;
 use LaravelAudit\Runners\PhpStanConfigurationFactory;
 use LaravelAudit\Runners\PhpStanRunner;
@@ -41,20 +58,66 @@ final class AuditServiceProvider extends ServiceProvider
         $this->app->singleton(PhpStanConfigurationFactory::class);
         $this->app->singleton(PhpStanRunner::class);
 
+        $this->app->singleton(PatternModel::class, function (): PatternModel {
+            return PatternModel::fromPath(__DIR__.'/../resources/pattern-model.json');
+        });
+
+        $this->app->singleton(PatternInferenceEngine::class);
+        $this->app->singleton(MethodFeatureExtractor::class);
+        $this->app->singleton(MethodSnippetExtractor::class);
+        $this->app->singleton(MethodReviewQueue::class);
+        $this->app->singleton(JsonHttpClient::class);
+
+        $this->app->singleton(HeuristicPatternAdvisor::class, function ($app): HeuristicPatternAdvisor {
+            $config = config('laravel-audit.patterns', []);
+
+            return new HeuristicPatternAdvisor(
+                engine: $app->make(PatternInferenceEngine::class),
+                minConfidence: (float) data_get($config, 'min_confidence', 0.55),
+                limit: (int) data_get($config, 'limit', 20),
+            );
+        });
+
+        $this->app->singleton(LlmPatternAdvisor::class, function ($app): LlmPatternAdvisor {
+            $config = config('laravel-audit.patterns.llm', []);
+
+            return new LlmPatternAdvisor(
+                heuristicAdvisor: $app->make(HeuristicPatternAdvisor::class),
+                snippetExtractor: $app->make(MethodSnippetExtractor::class),
+                httpClient: $app->make(JsonHttpClient::class),
+                provider: (string) data_get($config, 'provider', 'openai_compatible'),
+                endpoint: (string) data_get($config, 'endpoint', 'http://127.0.0.1:1234/v1/chat/completions'),
+                model: (string) data_get($config, 'model', 'local-model'),
+                apiKey: data_get($config, 'api_key'),
+                timeout: (int) data_get($config, 'timeout', 120),
+                reviewLimit: (int) data_get($config, 'review_limit', data_get($config, 'refine_top', 3)),
+            );
+        });
+
+        $this->app->singleton(PatternAdvisorFactory::class);
+
         $this->app->singleton(AnalyzerRegistry::class, function (): AnalyzerRegistry {
             return new AnalyzerRegistry([
                 new RawSqlAnalyzer,
                 new MassAssignmentAnalyzer,
                 new WeakValidationAnalyzer,
                 new DebugConfigurationAnalyzer,
+                new CommandInjectionAnalyzer,
+                new EvalUsageAnalyzer,
+                new HardcodedCredentialsAnalyzer,
+                new UnguardedModelAnalyzer,
                 new NPlusOneCandidateAnalyzer,
                 new SyncHeavyJobAnalyzer,
                 new MissingTransactionAnalyzer,
                 new EnvAccessOutsideConfigAnalyzer,
+                new GlobalVariablesAnalyzer,
                 new MissingFormRequestAnalyzer,
                 new FatControllerAnalyzer,
+                new LogicInRoutesAnalyzer,
+                new SilentFailureAnalyzer,
                 new LongMethodAnalyzer,
                 new LargeClassAnalyzer,
+                new NestingDepthAnalyzer,
                 new RedundantBooleanReturnAnalyzer,
                 new RedundantNullCoalesceAnalyzer,
                 new RedundantEmptyForeachGuardAnalyzer,

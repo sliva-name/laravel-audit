@@ -6,6 +6,7 @@ namespace LaravelAudit\Reporting;
 
 use LaravelAudit\Analysis\Issue;
 use LaravelAudit\Analysis\Severity;
+use LaravelAudit\Pattern\PatternSuggestion;
 use LaravelAudit\Runners\ToolResult;
 
 final readonly class AuditReport
@@ -13,11 +14,13 @@ final readonly class AuditReport
     /**
      * @param  list<Issue>  $issues
      * @param  list<ToolResult>  $toolResults
+     * @param  list<PatternSuggestion>  $patternSuggestions
      */
     public function __construct(
         public array $issues,
         public array $toolResults,
         public float $durationSeconds,
+        public array $patternSuggestions = [],
     ) {}
 
     /**
@@ -34,6 +37,10 @@ final readonly class AuditReport
                 'exitCode' => $result->exitCode,
             ], $this->toolResults),
             'issues' => array_map(fn (Issue $issue): array => $issue->toArray(), $this->issues),
+            'patternSuggestions' => array_map(
+                fn (PatternSuggestion $suggestion): array => $suggestion->toArray(),
+                $this->patternSuggestions,
+            ),
         ];
     }
 

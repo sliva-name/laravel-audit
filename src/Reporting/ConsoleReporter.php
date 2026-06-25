@@ -44,5 +44,34 @@ final class ConsoleReporter
                 $command->comment('Fix: '.$issue->recommendation);
             }
         }
+
+        if ($report->patternSuggestions === []) {
+            return;
+        }
+
+        $command->newLine();
+        $command->info('Pattern suggestions');
+
+        foreach ($report->patternSuggestions as $suggestion) {
+            $command->newLine();
+            $command->line(sprintf(
+                '%s [%s] %s (%.0f%%)',
+                strtoupper($suggestion->source),
+                $suggestion->pattern,
+                $suggestion->title,
+                $suggestion->confidence * 100,
+            ));
+            $command->line("{$suggestion->file}:{$suggestion->line} {$suggestion->class}::{$suggestion->method}()");
+            $command->line($suggestion->description);
+            $command->comment('Refactor: '.$suggestion->recommendation);
+
+            if ($suggestion->signals !== []) {
+                $command->line('Signals: '.implode(', ', $suggestion->signals));
+            }
+
+            if ($suggestion->llmRationale !== null) {
+                $command->line('LLM: '.$suggestion->llmRationale);
+            }
+        }
     }
 }
