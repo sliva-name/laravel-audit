@@ -66,14 +66,11 @@ final class AuditPanelController extends Controller
     {
         $options = $this->optionsFromRequest($request);
         $runUuid = $this->runs->create($options);
-
-        if ((bool) config('laravel-audit.dashboard.async', false)) {
-            $this->dispatcher->dispatch($runUuid);
-        }
+        $this->dispatcher->dispatch($runUuid);
 
         return redirect()
             ->route('laravel-audit.runs.show', $runUuid)
-            ->with('status', 'Audit started.');
+            ->with('status', 'Audit started in background.');
     }
 
     public function runShow(string $uuid): View
@@ -86,6 +83,7 @@ final class AuditPanelController extends Controller
             'run' => $run,
             'runUuid' => $uuid,
             'statusUrl' => route('laravel-audit.runs.status', $uuid),
+            'kickUrl' => route('laravel-audit.runs.kick', $uuid),
             'executeUrl' => route('laravel-audit.runs.execute', $uuid),
             'menu' => $this->menu('run'),
         ]);
@@ -96,6 +94,21 @@ final class AuditPanelController extends Controller
         $run = $this->runs->get($uuid);
 
         abort_if($run === null, 404);
+
+        return response()->json($this->runPayload($run));
+    }
+
+    public function runKick(string $uuid): JsonResponse
+    {
+        $run = $this->runs->get($uuid);
+
+        abort_if($run === null, 404);
+
+        if (($run['status'] ?? 'queued') === 'queued') {
+            $this->dispatcher->dispatch($uuid);
+        }
+
+        $run = $this->runs->get($uuid) ?? $run;
 
         return response()->json($this->runPayload($run));
     }

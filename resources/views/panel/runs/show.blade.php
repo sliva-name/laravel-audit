@@ -5,6 +5,7 @@
 @section('content')
     <h1 class="page-title">Running audit</h1>
     <p class="page-subtitle" id="run-message">{{ $run['message'] ?? 'Starting...' }}</p>
+    <p class="muted" style="margin-top:-12px;margin-bottom:24px;">The audit runs in the background. You can keep using the panel while it works.</p>
 
     <div class="card">
         <div class="progress-wrap">
@@ -25,6 +26,13 @@
                 <div class="run-log-line">{{ $line }}</div>
             @endforeach
         </div>
+    </div>
+
+    <div class="card hidden" id="run-stalled">
+        <strong>Worker has not started yet.</strong>
+        <p class="muted">The background worker may be unavailable on this server.</p>
+        <button class="btn" type="button" id="run-retry-kick">Retry background start</button>
+        <button class="btn" type="button" id="run-foreground" style="margin-left:8px;background:var(--panel-hover);color:var(--text);">Run in foreground (blocks UI)</button>
     </div>
 
     <div class="card hidden" id="run-error">
@@ -71,6 +79,7 @@
     <script>
         (function () {
             const statusUrl = @json($statusUrl);
+            const kickUrl = @json($kickUrl);
             const executeUrl = @json($executeUrl);
             const csrfToken = @json(csrf_token());
             const progressEl = document.getElementById('run-progress');
@@ -78,10 +87,14 @@
             const messageEl = document.getElementById('run-message');
             const statusEl = document.getElementById('run-status');
             const logEl = document.getElementById('run-log');
+            const stalledBox = document.getElementById('run-stalled');
             const errorBox = document.getElementById('run-error');
             const errorText = document.getElementById('run-error-text');
-            let executionStarted = false;
+            const retryKickButton = document.getElementById('run-retry-kick');
+            const foregroundButton = document.getElementById('run-foreground');
             let polling = true;
+            let queuedPolls = 0;
+            let kickAttempts = 0;
 
             function renderLog(lines) {
                 logEl.innerHTML = lines.map(function (line) {
@@ -96,6 +109,10 @@
                 messageEl.textContent = data.message;
                 statusEl.textContent = String(data.status).toUpperCase();
                 renderLog(data.log || []);
+
+                if (data.status === 'running') {
+                    stalledBox.classList.add('hidden');
+                }
 
                 if (data.status === 'completed' && data.report_url) {
                     polling = false;
@@ -113,6 +130,51 @@
                 return false;
             }
 
+            async function postJson(url) {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken,
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                });
+
+                if (!response.ok) {
+                    throw new Error('Request failed.');
+                }
+
+                return response.json();
+            }
+
+            async function kickWorker() {
+                kickAttempts += 1;
+                messageEl.textContent = 'Starting background worker...';
+
+                try {
+                    const data = await postJson(kickUrl);
+                    applyStatus(data);
+                } catch (error) {
+                    messageEl.textContent = 'Unable to start background worker.';
+                }
+            }
+
+            async function runInForeground() {
+                polling = false;
+                messageEl.textContent = 'Running audit in foreground...';
+
+                try {
+                    const data = await postJson(executeUrl);
+                    applyStatus(data);
+                    polling = true;
+                    poll();
+                } catch (error) {
+                    messageEl.textContent = 'Foreground run failed.';
+                    polling = true;
+                    poll();
+                }
+            }
+
             async function poll() {
                 if (!polling) {
                     return;
@@ -125,48 +187,36 @@
 
                     if (response.ok) {
                         const data = await response.json();
+
+                        if (data.status === 'queued') {
+                            queuedPolls += 1;
+
+                            if (queuedPolls === 2 && kickAttempts === 0) {
+                                kickWorker();
+                            }
+
+                            if (queuedPolls >= 6) {
+                                stalledBox.classList.remove('hidden');
+                            }
+                        } else {
+                            queuedPolls = 0;
+                        }
+
                         if (applyStatus(data)) {
                             return;
                         }
                     }
                 } catch (error) {
-                    messageEl.textContent = 'Connecting to audit worker...';
+                    messageEl.textContent = 'Waiting for background worker...';
                 }
 
                 window.setTimeout(poll, 1000);
             }
 
-            async function executeAudit() {
-                if (executionStarted) {
-                    return;
-                }
-
-                executionStarted = true;
-                messageEl.textContent = 'Starting audit...';
-
-                try {
-                    const response = await fetch(executeUrl, {
-                        method: 'POST',
-                        headers: {
-                            'Accept': 'application/json',
-                            'X-CSRF-TOKEN': csrfToken,
-                            'X-Requested-With': 'XMLHttpRequest',
-                        },
-                    });
-
-                    if (response.ok) {
-                        const data = await response.json();
-                        applyStatus(data);
-                    } else {
-                        throw new Error('Unable to start audit.');
-                    }
-                } catch (error) {
-                    messageEl.textContent = 'Failed to start audit. Retrying status checks...';
-                }
-            }
+            retryKickButton.addEventListener('click', kickWorker);
+            foregroundButton.addEventListener('click', runInForeground);
 
             poll();
-            executeAudit();
         })();
     </script>
 @endsection

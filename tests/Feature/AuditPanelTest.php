@@ -104,7 +104,7 @@ final class AuditPanelTest extends TestCase
             'no_tools' => '1',
         ])
             ->assertRedirect()
-            ->assertSessionHas('status', 'Audit started.');
+            ->assertSessionHas('status', 'Audit started in background.');
     }
 
     public function test_run_analysis_stores_report(): void
