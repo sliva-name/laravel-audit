@@ -5,17 +5,14 @@ declare(strict_types=1);
 namespace LaravelAudit\Console;
 
 use Illuminate\Console\Command;
-use LaravelAudit\Analysis\AnalysisContext;
-use LaravelAudit\Analysis\AnalyzerRegistry;
 use LaravelAudit\Analysis\Severity;
-use LaravelAudit\Pattern\PatternAdvisorFactory;
-use LaravelAudit\Project\ProjectScanner;
+use LaravelAudit\Audit\AuditEngine;
+use LaravelAudit\Audit\AuditOptions;
 use LaravelAudit\Reporting\AuditReport;
 use LaravelAudit\Reporting\ConsoleReporter;
 use LaravelAudit\Reporting\JsonReporter;
 use LaravelAudit\Reporting\SarifReporter;
-use LaravelAudit\Runners\PhpStanRunner;
-use LaravelAudit\Runners\PintRunner;
+use LaravelAudit\Repositories\AuditReportRepository;
 
 final class AnalyzeCommand extends Command
 {
@@ -25,68 +22,32 @@ final class AnalyzeCommand extends Command
         {--only= : Comma-separated analyzer categories to run}
         {--no-tools : Skip Pint and PHPStan runners}
         {--patterns : Score refactoring patterns with the weighted heuristic model}
-        {--llm : Confirm heuristic pattern hypotheses against method source code}';
+        {--llm : Confirm heuristic pattern hypotheses against method source code}
+        {--store : Save the report to the audit panel database}';
 
     protected $description = 'Analyze a Laravel project with Pint, PHPStan/Larastan, and Laravel-specific audit rules.';
 
-    public function handle(
-        ProjectScanner $scanner,
-        AnalyzerRegistry $registry,
-        PintRunner $pint,
-        PhpStanRunner $phpstan,
-        PatternAdvisorFactory $patternAdvisorFactory,
-    ): int {
-        $startedAt = microtime(true);
+    public function handle(AuditEngine $engine, AuditReportRepository $reports): int
+    {
         $config = config('laravel-audit', []);
-        $basePath = $this->laravel->basePath();
-        $context = new AnalysisContext($basePath, $scanner->scan($config), $config);
-        $categories = $this->categories();
-        $issues = [];
-        $toolResults = [];
-
-        foreach ($registry->enabledFor($context, $categories) as $analyzer) {
-            array_push($issues, ...$analyzer->analyze($context));
-        }
-
-        if (! $this->option('no-tools')) {
-            if ((bool) data_get($config, 'tools.pint.enabled', true)) {
-                $toolResults[] = $pint->run($basePath, data_get($config, 'tools.pint', []));
-            }
-
-            if ((bool) data_get($config, 'tools.phpstan.enabled', true)) {
-                $phpstanConfig = data_get($config, 'tools.phpstan', []);
-
-                if (is_array($phpstanConfig)) {
-                    $phpstanConfig['paths'] = $config['paths'] ?? [];
-                }
-
-                $toolResults[] = $phpstan->run($basePath, is_array($phpstanConfig) ? $phpstanConfig : []);
-            }
-
-            foreach ($toolResults as $toolResult) {
-                array_push($issues, ...$toolResult->issues);
-            }
-        }
-
-        $patternSuggestions = [];
-
-        if ($this->shouldInferPatterns($config)) {
-            $useLlm = (bool) $this->option('llm') || (bool) data_get($config, 'patterns.llm.enabled', false);
-            $useHeuristic = (bool) $this->option('patterns') || (bool) data_get($config, 'patterns.enabled', false);
-            $patternAdvisor = $patternAdvisorFactory->make($config, $useHeuristic, $useLlm);
-            $patternSuggestions = $patternAdvisor->suggest($context->project, $issues);
-        }
-
-        $report = new AuditReport(
-            issues: $issues,
-            toolResults: $toolResults,
-            durationSeconds: microtime(true) - $startedAt,
-            patternSuggestions: $patternSuggestions,
+        $options = new AuditOptions(
+            categories: $this->categories(),
+            noTools: (bool) $this->option('no-tools'),
+            patterns: (bool) $this->option('patterns'),
+            llm: (bool) $this->option('llm'),
+            failOn: $this->failOn($config),
         );
+
+        $report = $engine->run($options);
+
+        if ($this->option('store') && (bool) config('laravel-audit.dashboard.enabled', true)) {
+            $record = $reports->store($report, $options);
+            $this->info('Report saved: '.route('laravel-audit.reports.show', $record->uuid));
+        }
 
         $this->renderReport($report);
 
-        return $report->shouldFail($this->failOn($config)) ? self::FAILURE : self::SUCCESS;
+        return $report->shouldFail($options->failOn) ? self::FAILURE : self::SUCCESS;
     }
 
     /**
@@ -130,16 +91,4 @@ final class AnalyzeCommand extends Command
         (new ConsoleReporter)->render($this, $report);
     }
 
-    /**
-     * @param  array<string, mixed>  $config
-     */
-    private function shouldInferPatterns(array $config): bool
-    {
-        if ($this->option('patterns') || $this->option('llm')) {
-            return true;
-        }
-
-        return (bool) data_get($config, 'patterns.enabled', false)
-            || (bool) data_get($config, 'patterns.llm.enabled', false);
-    }
 }

@@ -32,7 +32,9 @@ use LaravelAudit\Analyzers\Security\MassAssignmentAnalyzer;
 use LaravelAudit\Analyzers\Security\RawSqlAnalyzer;
 use LaravelAudit\Analyzers\Security\UnguardedModelAnalyzer;
 use LaravelAudit\Analyzers\Security\WeakValidationAnalyzer;
+use LaravelAudit\Audit\AuditEngine;
 use LaravelAudit\Console\AnalyzeCommand;
+use LaravelAudit\Repositories\AuditReportRepository;
 use LaravelAudit\Pattern\HeuristicPatternAdvisor;
 use LaravelAudit\Pattern\JsonHttpClient;
 use LaravelAudit\Pattern\LlmPatternAdvisor;
@@ -96,6 +98,9 @@ final class AuditServiceProvider extends ServiceProvider
 
         $this->app->singleton(PatternAdvisorFactory::class);
 
+        $this->app->singleton(AuditEngine::class);
+        $this->app->singleton(AuditReportRepository::class);
+
         $this->app->singleton(AnalyzerRegistry::class, function (): AnalyzerRegistry {
             return new AnalyzerRegistry([
                 new RawSqlAnalyzer,
@@ -130,16 +135,24 @@ final class AuditServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        if (! $this->app->runningInConsole()) {
-            return;
-        }
-
         $this->publishes([
             __DIR__.'/../config/laravel-audit.php' => config_path('laravel-audit.php'),
         ], 'laravel-audit-config');
 
-        $this->commands([
-            AnalyzeCommand::class,
-        ]);
+        $this->publishes([
+            __DIR__.'/../database/migrations/' => database_path('migrations'),
+        ], 'laravel-audit-migrations');
+
+        if ((bool) config('laravel-audit.dashboard.enabled', true)) {
+            $this->loadRoutesFrom(__DIR__.'/../routes/audit.php');
+            $this->loadViewsFrom(__DIR__.'/../resources/views', 'laravel-audit');
+            $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+        }
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                AnalyzeCommand::class,
+            ]);
+        }
     }
 }

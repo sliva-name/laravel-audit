@@ -38,6 +38,12 @@ return [
         'fail_on' => 'error',
     ],
 
+    'dashboard' => [
+        'enabled' => env('LARAVEL_AUDIT_DASHBOARD', true),
+        'path' => env('LARAVEL_AUDIT_DASHBOARD_PATH', 'audit'),
+        'middleware' => ['web'],
+    ],
+
     'thresholds' => [
         'nesting_depth' => 4,
     ],
