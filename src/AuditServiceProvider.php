@@ -33,7 +33,10 @@ use LaravelAudit\Analyzers\Security\RawSqlAnalyzer;
 use LaravelAudit\Analyzers\Security\UnguardedModelAnalyzer;
 use LaravelAudit\Analyzers\Security\WeakValidationAnalyzer;
 use LaravelAudit\Audit\AuditEngine;
+use LaravelAudit\Audit\AuditProgressTracker;
+use LaravelAudit\Audit\AuditRunDispatcher;
 use LaravelAudit\Console\AnalyzeCommand;
+use LaravelAudit\Console\RunStoredAuditCommand;
 use LaravelAudit\Pattern\HeuristicPatternAdvisor;
 use LaravelAudit\Pattern\JsonHttpClient;
 use LaravelAudit\Pattern\LlmPatternAdvisor;
@@ -102,6 +105,14 @@ final class AuditServiceProvider extends ServiceProvider
         $this->app->singleton(PatternAdvisorFactory::class);
 
         $this->app->singleton(AuditEngine::class);
+        $this->app->singleton(AuditProgressTracker::class, function (): AuditProgressTracker {
+            $path = config('laravel-audit.dashboard.runs_path');
+
+            return new AuditProgressTracker(is_string($path) && $path !== '' ? $path : storage_path('app/laravel-audit/runs'));
+        });
+
+        $this->app->singleton(AuditRunDispatcher::class);
+
         $this->app->singleton(AuditReportStore::class, function ($app): AuditReportStore {
             $driver = (string) config('laravel-audit.dashboard.storage', 'file');
 
@@ -172,6 +183,7 @@ final class AuditServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 AnalyzeCommand::class,
+                RunStoredAuditCommand::class,
             ]);
         }
     }

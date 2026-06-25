@@ -5,18 +5,21 @@ declare(strict_types=1);
 namespace LaravelAudit\Http\Controllers;
 
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
-use LaravelAudit\Audit\AuditEngine;
 use LaravelAudit\Audit\AuditOptions;
+use LaravelAudit\Audit\AuditProgressTracker;
+use LaravelAudit\Audit\AuditRunDispatcher;
 use LaravelAudit\Repositories\AuditReportRepository;
 
 final class AuditPanelController extends Controller
 {
     public function __construct(
         private readonly AuditReportRepository $reports,
-        private readonly AuditEngine $engine,
+        private readonly AuditProgressTracker $runs,
+        private readonly AuditRunDispatcher $dispatcher,
     ) {}
 
     public function dashboard(): View
@@ -59,18 +62,57 @@ final class AuditPanelController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        $options = new AuditOptions(
+        $options = $this->optionsFromRequest($request);
+        $runUuid = $this->runs->create($options);
+        $this->dispatcher->dispatch($runUuid);
+
+        return redirect()
+            ->route('laravel-audit.runs.show', $runUuid)
+            ->with('status', 'Audit started.');
+    }
+
+    public function runShow(string $uuid): View
+    {
+        $run = $this->runs->get($uuid);
+
+        abort_if($run === null, 404);
+
+        return view('laravel-audit::panel.runs.show', [
+            'run' => $run,
+            'runUuid' => $uuid,
+            'statusUrl' => route('laravel-audit.runs.status', $uuid),
+            'menu' => $this->menu('run'),
+        ]);
+    }
+
+    public function runStatus(string $uuid): JsonResponse
+    {
+        $run = $this->runs->get($uuid);
+
+        abort_if($run === null, 404);
+
+        $reportUuid = $run['report_uuid'] ?? null;
+
+        return response()->json([
+            'status' => $run['status'] ?? 'queued',
+            'progress' => (int) ($run['progress'] ?? 0),
+            'message' => (string) ($run['message'] ?? ''),
+            'log' => is_array($run['log'] ?? null) ? $run['log'] : [],
+            'error' => $run['error'] ?? null,
+            'report_url' => is_string($reportUuid) && $reportUuid !== ''
+                ? route('laravel-audit.reports.show', $reportUuid)
+                : null,
+        ]);
+    }
+
+    private function optionsFromRequest(Request $request): AuditOptions
+    {
+        return new AuditOptions(
             categories: $this->categories($request),
             noTools: $request->boolean('no_tools'),
             patterns: $request->boolean('patterns'),
             llm: $request->boolean('llm'),
         );
-
-        $record = $this->reports->store($this->engine->run($options), $options);
-
-        return redirect()
-            ->route('laravel-audit.reports.show', $record->uuid)
-            ->with('status', 'Audit completed and saved.');
     }
 
     /**

@@ -15,6 +15,9 @@ use LaravelAudit\Runners\PintRunner;
 
 final class AuditEngine
 {
+    /** @var callable(AuditProgressUpdate): void|null */
+    private $onProgress = null;
+
     public function __construct(
         private readonly Application $app,
         private readonly ProjectScanner $scanner,
@@ -24,8 +27,12 @@ final class AuditEngine
         private readonly PatternAdvisorFactory $patternAdvisorFactory,
     ) {}
 
-    public function run(?AuditOptions $options = null): AuditReport
+    /**
+     * @param  callable(AuditProgressUpdate): void|null  $onProgress
+     */
+    public function run(?AuditOptions $options = null, ?callable $onProgress = null): AuditReport
     {
+        $this->onProgress = $onProgress;
         $options ??= new AuditOptions;
         $startedAt = microtime(true);
         $config = config('laravel-audit', []);
@@ -34,16 +41,25 @@ final class AuditEngine
         $issues = [];
         $toolResults = [];
 
-        foreach ($this->registry->enabledFor($context, $options->categories) as $analyzer) {
+        $analyzers = $this->registry->enabledFor($context, $options->categories);
+        $totalSteps = $this->totalSteps($options, $config, count($analyzers));
+        $step = 0;
+
+        $this->progress('Scanning project files', ++$step, $totalSteps);
+
+        foreach ($analyzers as $analyzer) {
+            $this->progress('Running analyzer: '.$analyzer->id(), ++$step, $totalSteps);
             array_push($issues, ...$analyzer->analyze($context));
         }
 
         if (! $options->noTools) {
             if ((bool) data_get($config, 'tools.pint.enabled', true)) {
+                $this->progress('Running Pint', ++$step, $totalSteps);
                 $toolResults[] = $this->pint->run($basePath, data_get($config, 'tools.pint', []));
             }
 
             if ((bool) data_get($config, 'tools.phpstan.enabled', true)) {
+                $this->progress('Running PHPStan', ++$step, $totalSteps);
                 $phpstanConfig = data_get($config, 'tools.phpstan', []);
 
                 if (is_array($phpstanConfig)) {
@@ -63,9 +79,20 @@ final class AuditEngine
         if ($this->shouldInferPatterns($config, $options)) {
             $useLlm = $options->llm || (bool) data_get($config, 'patterns.llm.enabled', false);
             $useHeuristic = $options->patterns || (bool) data_get($config, 'patterns.enabled', false);
+
+            if ($useHeuristic) {
+                $this->progress('Scoring refactoring patterns', ++$step, $totalSteps);
+            }
+
+            if ($useLlm) {
+                $this->progress('Confirming patterns with LLM', ++$step, $totalSteps);
+            }
+
             $patternAdvisor = $this->patternAdvisorFactory->make($config, $useHeuristic, $useLlm);
             $patternSuggestions = $patternAdvisor->suggest($context->project, $issues);
         }
+
+        $this->progress('Finalizing report', ++$step, $totalSteps);
 
         return new AuditReport(
             issues: $issues,
@@ -73,6 +100,48 @@ final class AuditEngine
             durationSeconds: microtime(true) - $startedAt,
             patternSuggestions: $patternSuggestions,
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     */
+    private function totalSteps(AuditOptions $options, array $config, int $analyzerCount): int
+    {
+        $steps = 1 + $analyzerCount + 1;
+
+        if (! $options->noTools) {
+            if ((bool) data_get($config, 'tools.pint.enabled', true)) {
+                $steps++;
+            }
+
+            if ((bool) data_get($config, 'tools.phpstan.enabled', true)) {
+                $steps++;
+            }
+        }
+
+        if ($this->shouldInferPatterns($config, $options)) {
+            $useLlm = $options->llm || (bool) data_get($config, 'patterns.llm.enabled', false);
+            $useHeuristic = $options->patterns || (bool) data_get($config, 'patterns.enabled', false);
+
+            if ($useHeuristic) {
+                $steps++;
+            }
+
+            if ($useLlm) {
+                $steps++;
+            }
+        }
+
+        return $steps;
+    }
+
+    private function progress(string $message, int $currentStep, int $totalSteps): void
+    {
+        if ($this->onProgress === null) {
+            return;
+        }
+
+        ($this->onProgress)(new AuditProgressUpdate($message, $currentStep, $totalSteps));
     }
 
     /**

@@ -13,13 +13,17 @@ final class AuditPanelTest extends TestCase
 {
     private string $reportsDirectory;
 
+    private string $runsDirectory;
+
     protected function setUp(): void
     {
         parent::setUp();
 
         $this->reportsDirectory = sys_get_temp_dir().'/laravel-audit-panel-'.uniqid('', true);
+        $this->runsDirectory = sys_get_temp_dir().'/laravel-audit-runs-'.uniqid('', true);
         $this->app['config']->set('laravel-audit.dashboard.storage', 'file');
         $this->app['config']->set('laravel-audit.dashboard.storage_path', $this->reportsDirectory);
+        $this->app['config']->set('laravel-audit.dashboard.runs_path', $this->runsDirectory);
     }
 
     protected function tearDown(): void
@@ -28,8 +32,16 @@ final class AuditPanelTest extends TestCase
             unlink($file);
         }
 
+        foreach (glob($this->runsDirectory.'/*.json') ?: [] as $file) {
+            unlink($file);
+        }
+
         if (is_dir($this->reportsDirectory)) {
             rmdir($this->reportsDirectory);
+        }
+
+        if (is_dir($this->runsDirectory)) {
+            rmdir($this->runsDirectory);
         }
 
         parent::tearDown();
@@ -86,12 +98,35 @@ final class AuditPanelTest extends TestCase
             ->assertSee('app/Http/Controllers/Foo.php');
     }
 
-    public function test_run_analysis_stores_report(): void
+    public function test_run_analysis_redirects_to_progress_page(): void
     {
         $this->post('/audit/reports', [
             'no_tools' => '1',
-        ])->assertRedirect();
+        ])
+            ->assertRedirect()
+            ->assertSessionHas('status', 'Audit started.');
+    }
+
+    public function test_run_analysis_stores_report(): void
+    {
+        $response = $this->post('/audit/reports', [
+            'no_tools' => '1',
+        ]);
+
+        $runUuid = basename((string) $response->headers->get('Location'));
+
+        $this->artisan('audit:run-stored', ['uuid' => $runUuid])->assertExitCode(0);
 
         $this->assertCount(1, glob($this->reportsDirectory.'/*.json') ?: []);
+    }
+
+    public function test_run_status_returns_progress_json(): void
+    {
+        $response = $this->post('/audit/reports', ['no_tools' => '1']);
+        $runUuid = basename((string) $response->headers->get('Location'));
+
+        $this->get('/audit/runs/'.$runUuid.'/status')
+            ->assertOk()
+            ->assertJsonStructure(['status', 'progress', 'message', 'log', 'report_url']);
     }
 }

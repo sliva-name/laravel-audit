@@ -20,6 +20,22 @@ final readonly class AuditOptions
     ) {}
 
     /**
+     * @param  array<string, mixed>  $data
+     */
+    public static function fromArray(array $data): self
+    {
+        $failOn = Severity::tryFrom((string) ($data['fail_on'] ?? Severity::Error->value)) ?? Severity::Error;
+
+        return new self(
+            categories: is_array($data['categories'] ?? null) ? array_values($data['categories']) : [],
+            noTools: (bool) ($data['no_tools'] ?? false),
+            patterns: (bool) ($data['patterns'] ?? false),
+            llm: (bool) ($data['llm'] ?? false),
+            failOn: $failOn,
+        );
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function toArray(): array

@@ -44,6 +44,7 @@ return [
         'middleware' => ['web'],
         'storage' => env('LARAVEL_AUDIT_DASHBOARD_STORAGE', 'file'),
         'storage_path' => env('LARAVEL_AUDIT_DASHBOARD_STORAGE_PATH'),
+        'runs_path' => env('LARAVEL_AUDIT_DASHBOARD_RUNS_PATH'),
     ],
 
     'thresholds' => [
