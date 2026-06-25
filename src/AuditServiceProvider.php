@@ -36,6 +36,8 @@ use LaravelAudit\Audit\AuditEngine;
 use LaravelAudit\Audit\AuditProgressTracker;
 use LaravelAudit\Audit\AuditRunDispatcher;
 use LaravelAudit\Audit\AuditRunExecutor;
+use LaravelAudit\Audit\Contracts\AuditRunProcessLauncher;
+use LaravelAudit\Audit\ExecAuditRunLauncher;
 use LaravelAudit\Console\AnalyzeCommand;
 use LaravelAudit\Console\RunStoredAuditCommand;
 use LaravelAudit\Pattern\HeuristicPatternAdvisor;
@@ -112,6 +114,7 @@ final class AuditServiceProvider extends ServiceProvider
             return new AuditProgressTracker(is_string($path) && $path !== '' ? $path : storage_path('app/laravel-audit/runs'));
         });
 
+        $this->app->singleton(AuditRunProcessLauncher::class, ExecAuditRunLauncher::class);
         $this->app->singleton(AuditRunDispatcher::class);
         $this->app->singleton(AuditRunExecutor::class);
 

@@ -4,110 +4,41 @@ declare(strict_types=1);
 
 namespace LaravelAudit\Audit;
 
-use Illuminate\Contracts\Foundation\Application;
+use LaravelAudit\Audit\Contracts\AuditRunProcessLauncher;
+use LaravelAudit\Jobs\RunStoredAuditJob;
 
 final class AuditRunDispatcher
 {
     public function __construct(
-        private readonly Application $app,
+        private readonly AuditRunProcessLauncher $process,
     ) {}
 
     public function dispatch(string $runUuid): bool
     {
-        $basePath = $this->app->basePath();
-        $php = $this->phpBinary();
-        $artisan = $this->artisanPath();
-        $logFile = $this->logFile($runUuid);
+        $runner = (string) config('laravel-audit.dashboard.runner', 'queue');
 
-        if (PHP_OS_FAMILY === 'Windows') {
-            return $this->dispatchOnWindows($php, $artisan, $runUuid, $basePath, $logFile);
+        if ($runner === 'process') {
+            return $this->process->dispatch($runUuid);
         }
 
-        return $this->dispatchOnUnix($php, $artisan, $runUuid, $basePath, $logFile);
+        return $this->dispatchQueued($runUuid);
     }
 
-    private function dispatchOnUnix(
-        string $php,
-        string $artisan,
-        string $runUuid,
-        string $basePath,
-        string $logFile,
-    ): bool {
-        $this->ensureLogDirectory($logFile);
+    private function dispatchQueued(string $runUuid): bool
+    {
+        $pending = RunStoredAuditJob::dispatch($runUuid);
 
-        $command = sprintf(
-            'cd %s && nohup %s %s audit:run-stored %s >> %s 2>&1 &',
-            escapeshellarg($basePath),
-            escapeshellarg($php),
-            escapeshellarg($artisan),
-            escapeshellarg($runUuid),
-            escapeshellarg($logFile),
-        );
+        $connection = config('laravel-audit.dashboard.queue_connection');
+        $queue = config('laravel-audit.dashboard.queue');
 
-        if (! function_exists('exec')) {
-            return false;
+        if (is_string($connection) && $connection !== '') {
+            $pending->onConnection($connection);
         }
 
-        exec($command, $output, $exitCode);
-
-        return $exitCode === 0;
-    }
-
-    private function dispatchOnWindows(
-        string $php,
-        string $artisan,
-        string $runUuid,
-        string $basePath,
-        string $logFile,
-    ): bool {
-        $this->ensureLogDirectory($logFile);
-
-        $command = sprintf(
-            'start /B "" %s %s audit:run-stored %s >> %s 2>&1',
-            escapeshellarg($php),
-            escapeshellarg($artisan),
-            escapeshellarg($runUuid),
-            escapeshellarg($logFile),
-        );
-
-        if (! function_exists('popen')) {
-            return false;
+        if (is_string($queue) && $queue !== '') {
+            $pending->onQueue($queue);
         }
-
-        $handle = popen('cd /d '.escapeshellarg($basePath).' && '.$command, 'r');
-
-        if ($handle === false) {
-            return false;
-        }
-
-        pclose($handle);
 
         return true;
-    }
-
-    private function phpBinary(): string
-    {
-        return defined('PHP_BINARY') ? PHP_BINARY : 'php';
-    }
-
-    private function artisanPath(): string
-    {
-        return $this->app->basePath('artisan');
-    }
-
-    private function logFile(string $runUuid): string
-    {
-        $safeUuid = str_replace(['/', '\\', ':'], '-', $runUuid);
-
-        return $this->app->storagePath('logs/laravel-audit-'.$safeUuid.'.log');
-    }
-
-    private function ensureLogDirectory(string $logFile): void
-    {
-        $directory = dirname($logFile);
-
-        if (! is_dir($directory)) {
-            mkdir($directory, 0755, true);
-        }
     }
 }

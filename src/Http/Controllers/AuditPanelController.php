@@ -85,6 +85,7 @@ final class AuditPanelController extends Controller
             'statusUrl' => route('laravel-audit.runs.status', $uuid),
             'kickUrl' => route('laravel-audit.runs.kick', $uuid),
             'executeUrl' => route('laravel-audit.runs.execute', $uuid),
+            'runner' => (string) config('laravel-audit.dashboard.runner', 'queue'),
             'menu' => $this->menu('run'),
         ]);
     }

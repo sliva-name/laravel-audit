@@ -45,6 +45,9 @@ return [
         'storage' => env('LARAVEL_AUDIT_DASHBOARD_STORAGE', 'file'),
         'storage_path' => env('LARAVEL_AUDIT_DASHBOARD_STORAGE_PATH'),
         'runs_path' => env('LARAVEL_AUDIT_DASHBOARD_RUNS_PATH'),
+        'runner' => env('LARAVEL_AUDIT_DASHBOARD_RUNNER', 'queue'),
+        'queue_connection' => env('LARAVEL_AUDIT_DASHBOARD_QUEUE_CONNECTION'),
+        'queue' => env('LARAVEL_AUDIT_DASHBOARD_QUEUE', 'default'),
     ],
 
     'thresholds' => [

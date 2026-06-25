@@ -19,6 +19,8 @@ abstract class TestCase extends Orchestra
             'database' => ':memory:',
             'prefix' => '',
         ]);
+        $app['config']->set('queue.default', 'sync');
+        $app['config']->set('laravel-audit.dashboard.runner', 'queue');
     }
 
     /**

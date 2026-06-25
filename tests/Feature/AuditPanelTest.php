@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace LaravelAudit\Tests\Feature;
 
 use LaravelAudit\Audit\AuditOptions;
+use LaravelAudit\Audit\AuditRunDispatcher;
+use LaravelAudit\Audit\Contracts\AuditRunProcessLauncher;
 use LaravelAudit\Reporting\AuditReport;
 use LaravelAudit\Repositories\FileAuditReportStore;
 use LaravelAudit\Tests\TestCase;
@@ -24,6 +26,8 @@ final class AuditPanelTest extends TestCase
         $this->app['config']->set('laravel-audit.dashboard.storage', 'file');
         $this->app['config']->set('laravel-audit.dashboard.storage_path', $this->reportsDirectory);
         $this->app['config']->set('laravel-audit.dashboard.runs_path', $this->runsDirectory);
+        $this->app['config']->set('laravel-audit.dashboard.runner', 'queue');
+        $this->app['config']->set('queue.default', 'sync');
     }
 
     protected function tearDown(): void
@@ -107,17 +111,11 @@ final class AuditPanelTest extends TestCase
             ->assertSessionHas('status', 'Audit started in background.');
     }
 
-    public function test_run_analysis_stores_report(): void
+    public function test_run_analysis_stores_report_via_queue_runner(): void
     {
-        $response = $this->post('/audit/reports', [
+        $this->post('/audit/reports', [
             'no_tools' => '1',
         ]);
-
-        $runUuid = basename((string) $response->headers->get('Location'));
-
-        $this->post('/audit/runs/'.$runUuid.'/execute')
-            ->assertOk()
-            ->assertJsonPath('status', 'completed');
 
         $this->assertCount(1, glob($this->reportsDirectory.'/*.json') ?: []);
     }
@@ -130,5 +128,29 @@ final class AuditPanelTest extends TestCase
         $this->get('/audit/runs/'.$runUuid.'/status')
             ->assertOk()
             ->assertJsonStructure(['status', 'progress', 'message', 'log', 'report_url']);
+    }
+
+    public function test_process_runner_can_be_selected(): void
+    {
+        $this->app->instance(AuditRunProcessLauncher::class, new class implements AuditRunProcessLauncher
+        {
+            public function dispatch(string $runUuid): bool
+            {
+                return true;
+            }
+        });
+        $this->app['config']->set('laravel-audit.dashboard.runner', 'process');
+
+        $this->assertTrue($this->app->make(AuditRunDispatcher::class)->dispatch('run-uuid'));
+    }
+
+    public function test_run_execute_still_works_as_foreground_fallback(): void
+    {
+        $response = $this->post('/audit/reports', ['no_tools' => '1']);
+        $runUuid = basename((string) $response->headers->get('Location'));
+
+        $this->post('/audit/runs/'.$runUuid.'/execute')
+            ->assertOk()
+            ->assertJsonPath('status', 'completed');
     }
 }
