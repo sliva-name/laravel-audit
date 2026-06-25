@@ -71,6 +71,8 @@
     <script>
         (function () {
             const statusUrl = @json($statusUrl);
+            const executeUrl = @json($executeUrl);
+            const csrfToken = @json(csrf_token());
             const progressEl = document.getElementById('run-progress');
             const percentEl = document.getElementById('run-percent');
             const messageEl = document.getElementById('run-message');
@@ -78,6 +80,8 @@
             const logEl = document.getElementById('run-log');
             const errorBox = document.getElementById('run-error');
             const errorText = document.getElementById('run-error-text');
+            let executionStarted = false;
+            let polling = true;
 
             function renderLog(lines) {
                 logEl.innerHTML = lines.map(function (line) {
@@ -86,41 +90,83 @@
                 logEl.scrollTop = logEl.scrollHeight;
             }
 
+            function applyStatus(data) {
+                progressEl.style.width = data.progress + '%';
+                percentEl.textContent = data.progress + '%';
+                messageEl.textContent = data.message;
+                statusEl.textContent = String(data.status).toUpperCase();
+                renderLog(data.log || []);
+
+                if (data.status === 'completed' && data.report_url) {
+                    polling = false;
+                    window.location.href = data.report_url;
+                    return true;
+                }
+
+                if (data.status === 'failed') {
+                    polling = false;
+                    errorText.textContent = data.error || 'Unknown error';
+                    errorBox.classList.remove('hidden');
+                    return true;
+                }
+
+                return false;
+            }
+
             async function poll() {
+                if (!polling) {
+                    return;
+                }
+
                 try {
                     const response = await fetch(statusUrl, {
                         headers: { 'Accept': 'application/json' },
                     });
 
-                    if (!response.ok) {
-                        throw new Error('Unable to fetch audit status.');
-                    }
-
-                    const data = await response.json();
-                    progressEl.style.width = data.progress + '%';
-                    percentEl.textContent = data.progress + '%';
-                    messageEl.textContent = data.message;
-                    statusEl.textContent = String(data.status).toUpperCase();
-                    renderLog(data.log || []);
-
-                    if (data.status === 'completed' && data.report_url) {
-                        window.location.href = data.report_url;
-                        return;
-                    }
-
-                    if (data.status === 'failed') {
-                        errorText.textContent = data.error || 'Unknown error';
-                        errorBox.classList.remove('hidden');
-                        return;
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (applyStatus(data)) {
+                            return;
+                        }
                     }
                 } catch (error) {
-                    messageEl.textContent = 'Waiting for audit worker...';
+                    messageEl.textContent = 'Connecting to audit worker...';
                 }
 
                 window.setTimeout(poll, 1000);
             }
 
+            async function executeAudit() {
+                if (executionStarted) {
+                    return;
+                }
+
+                executionStarted = true;
+                messageEl.textContent = 'Starting audit...';
+
+                try {
+                    const response = await fetch(executeUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken,
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        applyStatus(data);
+                    } else {
+                        throw new Error('Unable to start audit.');
+                    }
+                } catch (error) {
+                    messageEl.textContent = 'Failed to start audit. Retrying status checks...';
+                }
+            }
+
             poll();
+            executeAudit();
         })();
     </script>
 @endsection

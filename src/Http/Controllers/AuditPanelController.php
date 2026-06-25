@@ -12,6 +12,7 @@ use Illuminate\Routing\Controller;
 use LaravelAudit\Audit\AuditOptions;
 use LaravelAudit\Audit\AuditProgressTracker;
 use LaravelAudit\Audit\AuditRunDispatcher;
+use LaravelAudit\Audit\AuditRunExecutor;
 use LaravelAudit\Repositories\AuditReportRepository;
 
 final class AuditPanelController extends Controller
@@ -19,6 +20,7 @@ final class AuditPanelController extends Controller
     public function __construct(
         private readonly AuditReportRepository $reports,
         private readonly AuditProgressTracker $runs,
+        private readonly AuditRunExecutor $executor,
         private readonly AuditRunDispatcher $dispatcher,
     ) {}
 
@@ -64,7 +66,10 @@ final class AuditPanelController extends Controller
     {
         $options = $this->optionsFromRequest($request);
         $runUuid = $this->runs->create($options);
-        $this->dispatcher->dispatch($runUuid);
+
+        if ((bool) config('laravel-audit.dashboard.async', false)) {
+            $this->dispatcher->dispatch($runUuid);
+        }
 
         return redirect()
             ->route('laravel-audit.runs.show', $runUuid)
@@ -81,6 +86,7 @@ final class AuditPanelController extends Controller
             'run' => $run,
             'runUuid' => $uuid,
             'statusUrl' => route('laravel-audit.runs.status', $uuid),
+            'executeUrl' => route('laravel-audit.runs.execute', $uuid),
             'menu' => $this->menu('run'),
         ]);
     }
@@ -91,9 +97,32 @@ final class AuditPanelController extends Controller
 
         abort_if($run === null, 404);
 
+        return response()->json($this->runPayload($run));
+    }
+
+    public function runExecute(string $uuid): JsonResponse
+    {
+        $run = $this->runs->get($uuid);
+
+        abort_if($run === null, 404);
+
+        if (($run['status'] ?? 'queued') === 'queued') {
+            $this->executor->execute($uuid);
+            $run = $this->runs->get($uuid) ?? $run;
+        }
+
+        return response()->json($this->runPayload($run));
+    }
+
+    /**
+     * @param  array<string, mixed>  $run
+     * @return array<string, mixed>
+     */
+    private function runPayload(array $run): array
+    {
         $reportUuid = $run['report_uuid'] ?? null;
 
-        return response()->json([
+        return [
             'status' => $run['status'] ?? 'queued',
             'progress' => (int) ($run['progress'] ?? 0),
             'message' => (string) ($run['message'] ?? ''),
@@ -102,7 +131,7 @@ final class AuditPanelController extends Controller
             'report_url' => is_string($reportUuid) && $reportUuid !== ''
                 ? route('laravel-audit.reports.show', $reportUuid)
                 : null,
-        ]);
+        ];
     }
 
     private function optionsFromRequest(Request $request): AuditOptions

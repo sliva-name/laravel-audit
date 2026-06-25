@@ -115,7 +115,9 @@ final class AuditPanelTest extends TestCase
 
         $runUuid = basename((string) $response->headers->get('Location'));
 
-        $this->artisan('audit:run-stored', ['uuid' => $runUuid])->assertExitCode(0);
+        $this->post('/audit/runs/'.$runUuid.'/execute')
+            ->assertOk()
+            ->assertJsonPath('status', 'completed');
 
         $this->assertCount(1, glob($this->reportsDirectory.'/*.json') ?: []);
     }

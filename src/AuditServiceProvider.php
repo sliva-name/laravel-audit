@@ -35,6 +35,7 @@ use LaravelAudit\Analyzers\Security\WeakValidationAnalyzer;
 use LaravelAudit\Audit\AuditEngine;
 use LaravelAudit\Audit\AuditProgressTracker;
 use LaravelAudit\Audit\AuditRunDispatcher;
+use LaravelAudit\Audit\AuditRunExecutor;
 use LaravelAudit\Console\AnalyzeCommand;
 use LaravelAudit\Console\RunStoredAuditCommand;
 use LaravelAudit\Pattern\HeuristicPatternAdvisor;
@@ -112,6 +113,7 @@ final class AuditServiceProvider extends ServiceProvider
         });
 
         $this->app->singleton(AuditRunDispatcher::class);
+        $this->app->singleton(AuditRunExecutor::class);
 
         $this->app->singleton(AuditReportStore::class, function ($app): AuditReportStore {
             $driver = (string) config('laravel-audit.dashboard.storage', 'file');

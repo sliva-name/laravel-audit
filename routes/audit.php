@@ -19,4 +19,5 @@ Route::middleware($middleware)
         Route::get('/reports/{uuid}', [AuditPanelController::class, 'show'])->name('reports.show');
         Route::get('/runs/{uuid}', [AuditPanelController::class, 'runShow'])->name('runs.show');
         Route::get('/runs/{uuid}/status', [AuditPanelController::class, 'runStatus'])->name('runs.status');
+        Route::post('/runs/{uuid}/execute', [AuditPanelController::class, 'runExecute'])->name('runs.execute');
     });
