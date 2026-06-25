@@ -38,7 +38,7 @@ final class AnalyzerRegistry
     {
         return array_values(array_filter(
             $this->analyzers,
-            fn (AnalyzerInterface $analyzer): bool => $context->ruleEnabled($analyzer->id())
+            static fn (AnalyzerInterface $analyzer): bool => $context->ruleEnabled($analyzer->id())
                 && ($categories === [] || in_array($analyzer->category()->value, $categories, true)),
         ));
     }
