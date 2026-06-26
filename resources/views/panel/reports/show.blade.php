@@ -46,7 +46,13 @@
             <h2 style="margin-top:0;">Confirm hypotheses with LLM</h2>
             <p class="muted">Select heuristic hypotheses to validate against method source code. Unselected items stay heuristic-only.</p>
 
-            <form method="post" action="{{ route('laravel-audit.reports.confirm-patterns', $record->uuid) }}">
+            <form
+                method="post"
+                action="{{ route('laravel-audit.reports.confirm-patterns', $record->uuid) }}"
+                data-submit-loading
+                data-loading-message="Confirming with LLM…"
+                data-require-checked="llm_hypotheses[]"
+            >
                 @csrf
 
                 @foreach ($heuristicPatterns as $pattern)
@@ -66,6 +72,13 @@
                 @endforeach
 
                 <button class="btn" type="submit" style="margin-top:16px;">Confirm selected with LLM</button>
+
+                <div class="submit-progress" data-loading-progress hidden>
+                    <div class="submit-progress-bar">
+                        <div class="submit-progress-fill"></div>
+                    </div>
+                    <p class="muted">This may take a minute per selected hypothesis. Do not close the page.</p>
+                </div>
             </form>
         </div>
     @endif

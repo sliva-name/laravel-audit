@@ -39,11 +39,7 @@ final class FileAuditReportStore implements AuditReportStore
         );
 
         $path = $this->pathFor($snapshot->uuid);
-        $written = file_put_contents($path, json_encode($snapshot->toArray(), JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT));
-
-        if ($written === false) {
-            throw new \RuntimeException("Unable to write audit report to [{$path}].");
-        }
+        $this->writeSnapshot($path, $snapshot->toArray());
 
         return $snapshot;
     }
@@ -120,13 +116,37 @@ final class FileAuditReportStore implements AuditReportStore
         );
 
         $path = $this->pathFor($uuid);
-        $written = file_put_contents($path, json_encode($updated->toArray(), JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT));
-
-        if ($written === false) {
-            throw new \RuntimeException("Unable to write audit report to [{$path}].");
-        }
+        $this->writeSnapshot($path, $updated->toArray());
 
         return $updated;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function writeSnapshot(string $path, array $data): void
+    {
+        $this->ensureDirectory();
+
+        if (! is_writable($this->directory)) {
+            throw new \RuntimeException(
+                "Audit report directory [{$this->directory}] is not writable by the current PHP process. "
+                .'Ensure the web server and queue worker share write access, e.g. chown/chmod on storage/app/laravel-audit.',
+            );
+        }
+
+        $encoded = json_encode($data, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_INVALID_UTF8_SUBSTITUTE);
+        $written = @file_put_contents($path, $encoded, LOCK_EX);
+
+        if ($written === false) {
+            $error = error_get_last();
+            $details = $error !== null ? $error['message'] : '';
+
+            throw new \RuntimeException(
+                "Unable to write audit report to [{$path}]. {$details} "
+                .'Check ownership and permissions for storage/app/laravel-audit.',
+            );
+        }
     }
 
     private function pathFor(string $uuid): string

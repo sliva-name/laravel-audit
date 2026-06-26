@@ -550,6 +550,26 @@ LARAVEL_AUDIT_PATTERN_MODEL=/path/to/custom-pattern-model.json
 - Increase `LARAVEL_AUDIT_PATTERN_LLM_TIMEOUT` for slow local models
 - Test with `--patterns --llm --format=json` before using the panel
 
+### `Permission denied` writing `storage/app/laravel-audit/reports/*.json`
+
+- The web request that confirms patterns must be able to write the same directory as the queue worker / CLI that created the report
+- Fix ownership and permissions (adjust user/group for your stack):
+
+```bash
+sudo mkdir -p storage/app/laravel-audit/reports storage/app/laravel-audit/runs
+sudo chown -R www-data:www-data storage/app/laravel-audit
+sudo chmod -R ug+rwx storage/app/laravel-audit
+```
+
+- In Docker: run `chown` inside the PHP-FPM and queue-worker containers, or mount `storage` with a shared UID
+- Alternative: switch panel storage to database with `LARAVEL_AUDIT_DASHBOARD_STORAGE=database`
+
+### LM Studio log: `'messages' field is required` with body `{}`
+
+- Usually means the HTTP client failed to encode the request JSON (invalid UTF-8 in method source) and sent an empty payload
+- Recent package versions throw instead of posting `{}`; update the package if you still see `{}` requests
+- A successful log entry followed by this error can also be a second hypothesis or an unrelated probe to the same endpoint
+
 ### PHPStan/Larastan not found
 
 - Install dev dependencies in the host app: `composer require --dev larastan/larastan`

@@ -21,11 +21,17 @@ final class JsonHttpClient
             $headers[] = 'Authorization: Bearer '.$apiKey;
         }
 
+        if ($payload === []) {
+            throw new \InvalidArgumentException('LLM request payload cannot be empty.');
+        }
+
+        $encoded = json_encode($payload, JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE);
+
         $context = stream_context_create([
             'http' => [
                 'method' => 'POST',
                 'header' => implode("\r\n", $headers),
-                'content' => json_encode($payload) ?: '{}',
+                'content' => $encoded,
                 'timeout' => $timeout,
                 'ignore_errors' => true,
             ],

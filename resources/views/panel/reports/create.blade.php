@@ -7,7 +7,12 @@
     <p class="page-subtitle">Execute a new audit and store the report in the panel.</p>
 
     <div class="card">
-        <form method="post" action="{{ route('laravel-audit.reports.store') }}">
+        <form
+            method="post"
+            action="{{ route('laravel-audit.reports.store') }}"
+            data-submit-loading
+            data-loading-message="Starting audit…"
+        >
             @csrf
 
             <div class="form-row">

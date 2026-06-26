@@ -166,7 +166,8 @@
         .badge-failed { background: rgba(255, 107, 107, 0.15); color: var(--critical); }
 
         .btn {
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
             background: var(--accent);
             color: white;
             border: 0;
@@ -175,6 +176,60 @@
             font-weight: 600;
             cursor: pointer;
             text-decoration: none;
+        }
+
+        .btn:disabled {
+            opacity: 0.75;
+            cursor: wait;
+        }
+
+        .btn.is-loading::before {
+            content: '';
+            width: 14px;
+            height: 14px;
+            margin-right: 8px;
+            border: 2px solid rgba(255, 255, 255, 0.35);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: btn-spin 0.7s linear infinite;
+            flex-shrink: 0;
+        }
+
+        @keyframes btn-spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .submit-progress {
+            margin-top: 16px;
+        }
+
+        .submit-progress[hidden] {
+            display: none !important;
+        }
+
+        .submit-progress-bar {
+            height: 8px;
+            background: var(--panel-hover);
+            border-radius: 999px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+
+        .submit-progress-fill {
+            height: 100%;
+            width: 40%;
+            background: var(--accent);
+            border-radius: 999px;
+            animation: submit-progress-indeterminate 1.2s ease-in-out infinite;
+        }
+
+        @keyframes submit-progress-indeterminate {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(350%); }
+        }
+
+        form.is-pending label {
+            opacity: 0.65;
         }
 
         .status {
@@ -220,5 +275,49 @@
         @yield('content')
     </main>
 </div>
+<script>
+    document.querySelectorAll('form[data-submit-loading]').forEach((form) => {
+        form.addEventListener('submit', (event) => {
+            if (form.dataset.submitLoadingActive === '1') {
+                event.preventDefault();
+
+                return;
+            }
+
+            const requiredGroup = form.dataset.requireChecked;
+
+            if (requiredGroup) {
+                const checked = form.querySelectorAll(`input[name="${requiredGroup}"]:checked`);
+
+                if (checked.length === 0) {
+                    return;
+                }
+            }
+
+            const button = form.querySelector('[type="submit"]');
+
+            if (! button) {
+                return;
+            }
+
+            form.dataset.submitLoadingActive = '1';
+            form.classList.add('is-pending');
+            button.disabled = true;
+            button.classList.add('is-loading');
+            button.dataset.originalText = button.textContent;
+            button.textContent = form.dataset.loadingMessage || 'Please wait…';
+
+            form.querySelectorAll('input, select, textarea, button').forEach((element) => {
+                element.disabled = true;
+            });
+
+            const progress = form.querySelector('[data-loading-progress]');
+
+            if (progress) {
+                progress.hidden = false;
+            }
+        });
+    });
+</script>
 </body>
 </html>
