@@ -11,6 +11,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use LaravelAudit\Audit\AuditProgressTracker;
 use LaravelAudit\Audit\AuditRunExecutor;
+use LaravelAudit\Audit\AuditRunJobTimeout;
 use RuntimeException;
 use Throwable;
 
@@ -23,9 +24,15 @@ final class RunStoredAuditJob implements ShouldQueue
 
     public int $tries = 1;
 
+    public int $timeout;
+
     public function __construct(
         public readonly string $runUuid,
-    ) {}
+    ) {
+        $options = app(AuditProgressTracker::class)->optionsFromRun($runUuid);
+
+        $this->timeout = AuditRunJobTimeout::forOptions($options);
+    }
 
     public function handle(AuditRunExecutor $executor): void
     {

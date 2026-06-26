@@ -39,6 +39,7 @@ use LaravelAudit\Audit\AuditEngine;
 use LaravelAudit\Audit\AuditProgressTracker;
 use LaravelAudit\Audit\AuditRunDispatcher;
 use LaravelAudit\Audit\AuditRunExecutor;
+use LaravelAudit\Audit\AuditRunJobTimeout;
 use LaravelAudit\Audit\Contracts\AuditRunProcessLauncher;
 use LaravelAudit\Audit\ExecAuditRunLauncher;
 use LaravelAudit\Console\AnalyzeCommand;
@@ -94,6 +95,7 @@ final class AuditServiceProvider extends ServiceProvider
 
         $this->app->singleton(LlmPatternAdvisor::class, function ($app): LlmPatternAdvisor {
             $config = config('laravel-audit.patterns.llm', []);
+            $auditConfig = config('laravel-audit', []);
 
             return new LlmPatternAdvisor(
                 heuristicAdvisor: $app->make(HeuristicPatternAdvisor::class),
@@ -105,6 +107,7 @@ final class AuditServiceProvider extends ServiceProvider
                 apiKey: data_get($config, 'api_key'),
                 timeout: (int) data_get($config, 'timeout', 120),
                 reviewLimit: (int) data_get($config, 'review_limit', data_get($config, 'refine_top', 3)),
+                maxAttempts: AuditRunJobTimeout::maxLlmAttempts($auditConfig),
             );
         });
 

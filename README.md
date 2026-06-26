@@ -141,8 +141,8 @@ QUEUE_CONNECTION=database   # or redis, sqs, etc.
 php artisan queue:table
 php artisan migrate
 
-# Keep a worker running
-php artisan queue:work
+# Keep a worker running. For LLM audits, set worker timeout above the job timeout.
+php artisan queue:work --timeout=1800
 ```
 
 With `QUEUE_CONNECTION=sync`, jobs run inline during the HTTP request (fine for tests, but blocks the create request).
@@ -220,6 +220,8 @@ When Larastan is installed and the project has no `phpstan.neon` / `phpstan.neon
 | `dashboard.runner` | `LARAVEL_AUDIT_DASHBOARD_RUNNER` | `queue` | `queue` or `process` |
 | `dashboard.queue_connection` | `LARAVEL_AUDIT_DASHBOARD_QUEUE_CONNECTION` | — | Queue connection (default: app default) |
 | `dashboard.queue` | `LARAVEL_AUDIT_DASHBOARD_QUEUE` | `default` | Queue name |
+| `dashboard.job_timeout` | `LARAVEL_AUDIT_DASHBOARD_JOB_TIMEOUT` | `180` | Base queue job timeout (seconds) |
+| `dashboard.llm_job_timeout` | `LARAVEL_AUDIT_DASHBOARD_LLM_JOB_TIMEOUT` | — | Optional fixed timeout for LLM audits |
 
 Default storage paths:
 
@@ -246,6 +248,7 @@ Default storage paths:
 | `patterns.llm.model` | `LARAVEL_AUDIT_PATTERN_LLM_MODEL` | `local-model` | Model name |
 | `patterns.llm.api_key` | `LARAVEL_AUDIT_PATTERN_LLM_API_KEY` | — | API key (optional for local servers) |
 | `patterns.llm.timeout` | `LARAVEL_AUDIT_PATTERN_LLM_TIMEOUT` | `120` | HTTP timeout (seconds) |
+| `patterns.llm.max_attempts` | `LARAVEL_AUDIT_PATTERN_LLM_MAX_ATTEMPTS` | auto | Max LLM HTTP calls per audit |
 | `patterns.llm.review_limit` | `LARAVEL_AUDIT_PATTERN_LLM_REVIEW_LIMIT` | `3` | Max methods sent to LLM |
 | `patterns.llm.refine_top` | `LARAVEL_AUDIT_PATTERN_LLM_REFINE_TOP` | `3` | Legacy alias for review limit |
 
@@ -518,6 +521,13 @@ LARAVEL_AUDIT_PATTERN_MODEL=/path/to/custom-pattern-model.json
 - Check `function_exists('exec')` is true
 - Inspect `storage/logs/laravel-audit-{uuid}.log`
 - Switch to queue runner for production
+
+### LLM audit times out in queue
+
+- `RunStoredAuditJob` now sets a longer timeout automatically when LLM is enabled
+- The queue worker timeout must still be high enough: `php artisan queue:work --timeout=1800`
+- Or set a fixed ceiling with `LARAVEL_AUDIT_DASHBOARD_LLM_JOB_TIMEOUT=3600`
+- Reduce load with `LARAVEL_AUDIT_PATTERN_LLM_REVIEW_LIMIT` or `LARAVEL_AUDIT_PATTERN_LLM_MAX_ATTEMPTS`
 
 ### LLM returns empty or invalid JSON
 

@@ -20,6 +20,7 @@ final class LlmPatternAdvisor implements PatternAdvisorInterface
         private readonly ?string $apiKey = null,
         private readonly int $timeout = 120,
         private readonly int $reviewLimit = 3,
+        private readonly int $maxAttempts = 10,
     ) {}
 
     /**
@@ -30,9 +31,10 @@ final class LlmPatternAdvisor implements PatternAdvisorInterface
     {
         $heuristic = $this->heuristicAdvisor->suggest($project, $issues);
         $suggestions = [];
+        $attempts = 0;
 
         foreach ($this->topHypothesesByMethod($heuristic) as $hypothesis) {
-            if (count($suggestions) >= $this->reviewLimit) {
+            if (count($suggestions) >= $this->reviewLimit || $attempts >= $this->maxAttempts) {
                 break;
             }
 
@@ -48,6 +50,7 @@ final class LlmPatternAdvisor implements PatternAdvisorInterface
                 continue;
             }
 
+            $attempts++;
             $llmResult = $this->confirm($hypothesis, $snippet);
 
             if ($llmResult === null || ! ($llmResult['confirmed'] ?? false)) {

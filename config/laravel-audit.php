@@ -48,6 +48,8 @@ return [
         'runner' => env('LARAVEL_AUDIT_DASHBOARD_RUNNER', 'queue'),
         'queue_connection' => env('LARAVEL_AUDIT_DASHBOARD_QUEUE_CONNECTION'),
         'queue' => env('LARAVEL_AUDIT_DASHBOARD_QUEUE', 'default'),
+        'job_timeout' => (int) env('LARAVEL_AUDIT_DASHBOARD_JOB_TIMEOUT', 180),
+        'llm_job_timeout' => env('LARAVEL_AUDIT_DASHBOARD_LLM_JOB_TIMEOUT'),
     ],
 
     'thresholds' => [
@@ -66,6 +68,7 @@ return [
             'model' => env('LARAVEL_AUDIT_PATTERN_LLM_MODEL', 'local-model'),
             'api_key' => env('LARAVEL_AUDIT_PATTERN_LLM_API_KEY'),
             'timeout' => (int) env('LARAVEL_AUDIT_PATTERN_LLM_TIMEOUT', 120),
+            'max_attempts' => (int) env('LARAVEL_AUDIT_PATTERN_LLM_MAX_ATTEMPTS', 0),
             'refine_top' => (int) env('LARAVEL_AUDIT_PATTERN_LLM_REFINE_TOP', 3),
             'review_limit' => (int) env('LARAVEL_AUDIT_PATTERN_LLM_REVIEW_LIMIT', 3),
         ],

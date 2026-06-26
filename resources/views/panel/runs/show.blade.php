@@ -31,7 +31,8 @@
     <div class="card hidden" id="run-stalled">
         <strong>Worker has not started yet.</strong>
         @if ($runner === 'queue')
-            <p class="muted">Make sure a queue worker is running, for example: <code>php artisan queue:work</code></p>
+            <p class="muted">Make sure a queue worker is running, for example: <code>php artisan queue:work --timeout=1800</code></p>
+            <p class="muted">LLM audits need a worker timeout higher than the job timeout. Increase it if the job fails with a timeout error.</p>
         @else
             <p class="muted">The detached PHP process runner may be unavailable on this server.</p>
         @endif
