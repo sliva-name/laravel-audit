@@ -14,20 +14,16 @@ final class PatternReportMerger
      */
     public static function merge(array $existing, array $confirmed, array $confirmedKeys): array
     {
-        $confirmedByKey = [];
-
-        foreach ($confirmed as $suggestion) {
-            $confirmedByKey[PatternHypothesisKey::for($suggestion)] = $suggestion;
-        }
+        $reviewedKeys = array_fill_keys($confirmedKeys, true);
 
         $remaining = array_values(array_filter(
             $existing,
-            static function (array $item) use ($confirmedByKey): bool {
+            static function (array $item) use ($reviewedKeys): bool {
                 if (($item['source'] ?? 'heuristic') !== 'heuristic') {
                     return true;
                 }
 
-                return ! isset($confirmedByKey[PatternHypothesisKey::fromArray($item)]);
+                return ! isset($reviewedKeys[PatternHypothesisKey::fromArray($item)]);
             },
         ));
 

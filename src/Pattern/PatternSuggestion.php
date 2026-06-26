@@ -24,11 +24,16 @@ final readonly class PatternSuggestion
         public array $signals = [],
         public ?string $llmRationale = null,
         public string $source = 'heuristic',
+        public ?string $hypothesisKey = null,
     ) {}
 
     public function hypothesisKey(): string
     {
-        return PatternHypothesisKey::for($this);
+        if ($this->hypothesisKey !== null && $this->hypothesisKey !== '') {
+            return $this->hypothesisKey;
+        }
+
+        return PatternHypothesisKey::compose($this->pattern, $this->file, $this->method);
     }
 
     /**

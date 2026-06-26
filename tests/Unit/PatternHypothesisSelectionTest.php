@@ -75,4 +75,46 @@ final class PatternHypothesisSelectionTest extends TestCase
         $this->assertSame('heuristic', $merged[0]['source'] ?? null);
         $this->assertSame('repository', $merged[0]['pattern'] ?? null);
     }
+
+    public function test_report_merger_replaces_selected_heuristics_with_refuted_results(): void
+    {
+        $key = 'repository:database/migrations/2024_01_01_000000_update_tags.php::up';
+
+        $merged = PatternReportMerger::merge(
+            [
+                [
+                    'hypothesisKey' => $key,
+                    'pattern' => 'repository',
+                    'source' => 'heuristic',
+                    'title' => 'Repository',
+                    'location' => [
+                        'file' => 'database/migrations/2024_01_01_000000_update_tags.php',
+                        'method' => 'up',
+                    ],
+                ],
+            ],
+            [
+                new PatternSuggestion(
+                    pattern: 'repository',
+                    title: 'Repository',
+                    description: 'This is migration logic, not a repository.',
+                    recommendation: 'Keep the logic in the migration.',
+                    confidence: 0.68,
+                    file: 'database/migrations/2024_01_01_000000_update_tags.php',
+                    line: 10,
+                    method: 'up',
+                    class: 'anonymous',
+                    features: [],
+                    llmRationale: 'Uses Schema::table and DB::table.',
+                    source: 'refuted',
+                    hypothesisKey: $key,
+                ),
+            ],
+            [$key],
+        );
+
+        $this->assertCount(1, $merged);
+        $this->assertSame('refuted', $merged[0]['source'] ?? null);
+        $this->assertSame('repository', $merged[0]['pattern'] ?? null);
+    }
 }

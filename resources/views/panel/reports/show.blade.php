@@ -55,11 +55,22 @@
             >
                 @csrf
 
+                <label class="pattern hypothesis-select-all" style="display:block;">
+                    <input
+                        type="checkbox"
+                        id="llm-hypotheses-select-all"
+                        style="margin-right:8px;"
+                    >
+                    <strong>Select all</strong>
+                    <span class="muted">({{ $heuristicPatterns->count() }} hypotheses)</span>
+                </label>
+
                 @foreach ($heuristicPatterns as $pattern)
                     <label class="pattern" style="display:block;">
                         <input
                             type="checkbox"
                             name="llm_hypotheses[]"
+                            class="llm-hypothesis-checkbox"
                             value="{{ $pattern['hypothesisKey'] ?? (($pattern['pattern'] ?? '').':'.($pattern['location']['file'] ?? '').'::'.($pattern['location']['method'] ?? '')) }}"
                             style="margin-right:8px;"
                         >
@@ -83,6 +94,41 @@
         </div>
     @endif
 
+    @if ($heuristicPatterns->isNotEmpty())
+        <script>
+            (function () {
+                const form = document.querySelector('form[data-require-checked="llm_hypotheses[]"]');
+
+                if (! form) {
+                    return;
+                }
+
+                const selectAll = form.querySelector('#llm-hypotheses-select-all');
+                const boxes = form.querySelectorAll('.llm-hypothesis-checkbox');
+
+                if (! selectAll || boxes.length === 0) {
+                    return;
+                }
+
+                const syncSelectAll = () => {
+                    const checkedCount = [...boxes].filter((box) => box.checked).length;
+
+                    selectAll.checked = checkedCount === boxes.length;
+                    selectAll.indeterminate = checkedCount > 0 && checkedCount < boxes.length;
+                };
+
+                selectAll.addEventListener('change', () => {
+                    boxes.forEach((box) => {
+                        box.checked = selectAll.checked;
+                    });
+                    selectAll.indeterminate = false;
+                });
+
+                boxes.forEach((box) => box.addEventListener('change', syncSelectAll));
+            })();
+        </script>
+    @endif
+
     @if (! empty($report['patternSuggestions']))
         <div class="card">
             <h2 style="margin-top:0;">Pattern suggestions</h2>
@@ -93,6 +139,7 @@
                             'badge',
                             'badge-confirmed' => ($pattern['source'] ?? '') === 'confirmed',
                             'badge-heuristic' => ($pattern['source'] ?? 'heuristic') === 'heuristic',
+                            'badge-refuted' => ($pattern['source'] ?? '') === 'refuted',
                         ])>{{ strtoupper($pattern['source'] ?? 'heuristic') }}</span>
                         <strong>{{ $pattern['title'] ?? $pattern['pattern'] }}</strong>
                         <span class="muted">({{ number_format(($pattern['confidence'] ?? 0) * 100, 0) }}%)</span>

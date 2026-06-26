@@ -37,10 +37,13 @@ final class LlmPatternAdvisor implements PatternAdvisorInterface
         $queue = $selectedKeys
             ? $this->selectedHypotheses($heuristic, $llmHypothesisKeys)
             : $this->topHypothesesByMethod($heuristic);
-        $confirmationLimit = $selectedKeys ? count($queue) : $this->reviewLimit;
 
         foreach ($queue as $hypothesis) {
-            if (count($suggestions) >= $confirmationLimit || $attempts >= $this->maxAttempts) {
+            if ($attempts >= $this->maxAttempts) {
+                break;
+            }
+
+            if (! $selectedKeys && count($suggestions) >= $this->reviewLimit) {
                 break;
             }
 
@@ -59,11 +62,26 @@ final class LlmPatternAdvisor implements PatternAdvisorInterface
             $attempts++;
             $llmResult = $this->confirm($hypothesis, $snippet);
 
-            if ($llmResult === null || ! ($llmResult['confirmed'] ?? false)) {
+            if ($llmResult === null) {
                 continue;
             }
 
-            $suggestions[] = new PatternSuggestion(
+            $suggestions[] = $this->reviewedSuggestion($hypothesis, $llmResult);
+        }
+
+        return $suggestions;
+    }
+
+    /**
+     * @param  array<string, mixed>  $llmResult
+     */
+    private function reviewedSuggestion(PatternSuggestion $hypothesis, array $llmResult): PatternSuggestion
+    {
+        $key = $hypothesis->hypothesisKey();
+        $confirmed = (bool) ($llmResult['confirmed'] ?? false);
+
+        if ($confirmed) {
+            return new PatternSuggestion(
                 pattern: (string) $llmResult['pattern'],
                 title: (string) $llmResult['title'],
                 description: (string) $llmResult['description'],
@@ -80,10 +98,29 @@ final class LlmPatternAdvisor implements PatternAdvisorInterface
                 ],
                 llmRationale: (string) $llmResult['rationale'],
                 source: 'confirmed',
+                hypothesisKey: $key,
             );
         }
 
-        return $suggestions;
+        return new PatternSuggestion(
+            pattern: $hypothesis->pattern,
+            title: $hypothesis->title,
+            description: (string) $llmResult['description'],
+            recommendation: (string) $llmResult['recommendation'],
+            confidence: $hypothesis->confidence,
+            file: $hypothesis->file,
+            line: $hypothesis->line,
+            method: $hypothesis->method,
+            class: $hypothesis->class,
+            features: $hypothesis->features,
+            signals: [
+                'hypothesis:'.$hypothesis->pattern,
+                ...$hypothesis->signals,
+            ],
+            llmRationale: (string) $llmResult['rationale'],
+            source: 'refuted',
+            hypothesisKey: $key,
+        );
     }
 
     /**

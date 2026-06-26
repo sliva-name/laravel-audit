@@ -202,6 +202,7 @@ final class AuditPanelTest extends TestCase
         $this->get('/audit/reports/'.$snapshot->uuid)
             ->assertOk()
             ->assertSee('Confirm hypotheses with LLM')
+            ->assertSee('Select all')
             ->assertSee('action:app/Http/Controllers/UserController.php::store');
     }
 

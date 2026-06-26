@@ -398,7 +398,7 @@ Does **not** pick patterns from scratch. For each heuristic hypothesis it sends:
 - structural facts (lines, branches, etc.)
 - **method source code**
 
-The model must **confirm or reject** the hypothesis with code evidence. Only confirmed items appear with `source: confirmed`.
+The model must **confirm or reject** the hypothesis with code evidence. Confirmed items use `source: confirmed`; rejected ones use `source: refuted` with the LLM rationale.
 
 **Automatic (top N):** with `--llm` and no explicit keys, the advisor picks the strongest hypotheses per method, up to `patterns.llm.review_limit`.
 

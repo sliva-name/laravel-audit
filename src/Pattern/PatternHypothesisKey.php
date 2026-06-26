@@ -8,7 +8,12 @@ final class PatternHypothesisKey
 {
     public static function for(PatternSuggestion $suggestion): string
     {
-        return $suggestion->pattern.':'.$suggestion->file.'::'.$suggestion->method;
+        return $suggestion->hypothesisKey();
+    }
+
+    public static function compose(string $pattern, string $file, string $method): string
+    {
+        return $pattern.':'.$file.'::'.$method;
     }
 
     /**
