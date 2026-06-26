@@ -85,6 +85,57 @@ final class AuditProgressTracker
             return null;
         }
 
+        return $this->readRunFile($path);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function list(int $limit = 100): array
+    {
+        if (! is_dir($this->directory)) {
+            return [];
+        }
+
+        $runs = [];
+
+        foreach (glob($this->directory.'/*.json') ?: [] as $path) {
+            $run = $this->readRunFile($path);
+
+            if ($run !== null) {
+                $runs[] = $run;
+            }
+        }
+
+        usort(
+            $runs,
+            fn (array $left, array $right): int => strcmp(
+                (string) ($right['updated_at'] ?? $right['created_at'] ?? ''),
+                (string) ($left['updated_at'] ?? $left['created_at'] ?? ''),
+            ),
+        );
+
+        return array_slice($runs, 0, max(1, $limit));
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function active(int $limit = 20): array
+    {
+        $active = array_values(array_filter(
+            $this->list(100),
+            fn (array $run): bool => in_array($run['status'] ?? '', ['queued', 'running'], true),
+        ));
+
+        return array_slice($active, 0, max(1, $limit));
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function readRunFile(string $path): ?array
+    {
         $contents = file_get_contents($path);
 
         if ($contents === false) {

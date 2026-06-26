@@ -56,7 +56,18 @@ final class AuditPanelTest extends TestCase
         $this->get('/audit')
             ->assertOk()
             ->assertSee('Overview')
-            ->assertSee('All Reports');
+            ->assertSee('All Reports')
+            ->assertSee('Jobs');
+    }
+
+    public function test_runs_index_lists_background_jobs(): void
+    {
+        $this->post('/audit/reports', ['no_tools' => '1']);
+
+        $this->get('/audit/runs')
+            ->assertOk()
+            ->assertSee('Jobs')
+            ->assertSee('COMPLETED');
     }
 
     public function test_reports_index_lists_saved_reports(): void

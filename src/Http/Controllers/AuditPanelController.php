@@ -27,9 +27,11 @@ final class AuditPanelController extends Controller
     public function dashboard(): View
     {
         $reports = $this->reports->latest(10);
+        $activeRuns = $this->runs->active();
 
         return view('laravel-audit::panel.dashboard', [
             'reports' => $reports,
+            'activeRuns' => $activeRuns,
             'menu' => $this->menu('dashboard'),
         ]);
     }
@@ -73,6 +75,14 @@ final class AuditPanelController extends Controller
             ->with('status', 'Audit started in background.');
     }
 
+    public function runsIndex(): View
+    {
+        return view('laravel-audit::panel.runs.index', [
+            'runs' => $this->runs->list(),
+            'menu' => $this->menu('runs'),
+        ]);
+    }
+
     public function runShow(string $uuid): View
     {
         $run = $this->runs->get($uuid);
@@ -86,7 +96,7 @@ final class AuditPanelController extends Controller
             'kickUrl' => route('laravel-audit.runs.kick', $uuid),
             'executeUrl' => route('laravel-audit.runs.execute', $uuid),
             'runner' => (string) config('laravel-audit.dashboard.runner', 'queue'),
-            'menu' => $this->menu('run'),
+            'menu' => $this->menu('runs'),
         ]);
     }
 
@@ -187,6 +197,11 @@ final class AuditPanelController extends Controller
                 'label' => 'All Reports',
                 'route' => route('laravel-audit.reports.index'),
                 'active' => $active === 'reports',
+            ],
+            [
+                'label' => 'Jobs',
+                'route' => route('laravel-audit.runs.index'),
+                'active' => $active === 'runs',
             ],
             [
                 'label' => 'Run Analysis',

@@ -33,6 +33,42 @@
         </div>
     @endif
 
+    @if ($activeRuns !== [])
+        <div class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:16px;">
+                <h2 style="margin:0;">Active jobs</h2>
+                <a class="link" href="{{ route('laravel-audit.runs.index') }}">View all jobs</a>
+            </div>
+            <table>
+                <thead>
+                <tr>
+                    <th>Status</th>
+                    <th>Progress</th>
+                    <th>Message</th>
+                    <th></th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach ($activeRuns as $run)
+                    @php($status = (string) ($run['status'] ?? 'queued'))
+                    <tr>
+                        <td>
+                            <span @class([
+                                'badge',
+                                'badge-queued' => $status === 'queued',
+                                'badge-running' => $status === 'running',
+                            ])>{{ strtoupper($status) }}</span>
+                        </td>
+                        <td>{{ (int) ($run['progress'] ?? 0) }}%</td>
+                        <td>{{ $run['message'] ?? '—' }}</td>
+                        <td><a class="link" href="{{ route('laravel-audit.runs.show', $run['uuid']) }}">Watch</a></td>
+                    </tr>
+                @endforeach
+                </tbody>
+            </table>
+        </div>
+    @endif
+
     <div class="card">
         <h2 style="margin-top:0;">Recent reports</h2>
         @if ($reports === [])

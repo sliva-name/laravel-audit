@@ -53,4 +53,27 @@ final class AuditProgressTrackerTest extends TestCase
         $this->assertSame(100, $run['progress'] ?? null);
         $this->assertContains('Running analyzer: security.raw-sql', $run['log'] ?? []);
     }
+
+    public function test_it_lists_runs_newest_first_and_filters_active_runs(): void
+    {
+        $tracker = new AuditProgressTracker($this->directory);
+
+        $first = $tracker->create(new AuditOptions(noTools: true));
+        $second = $tracker->create(new AuditOptions(patterns: true));
+
+        $tracker->markRunning($second);
+        $tracker->complete($first, 'report-uuid');
+
+        $listed = $tracker->list();
+        $this->assertCount(2, $listed);
+        $this->assertEqualsCanonicalizing(
+            [$first, $second],
+            array_column($listed, 'uuid'),
+        );
+
+        $active = $tracker->active();
+        $this->assertCount(1, $active);
+        $this->assertSame($second, $active[0]['uuid'] ?? null);
+        $this->assertSame('running', $active[0]['status'] ?? null);
+    }
 }

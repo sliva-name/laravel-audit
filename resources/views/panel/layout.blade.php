@@ -160,6 +160,10 @@
         .badge-info { background: rgba(116, 192, 252, 0.15); color: var(--info); }
         .badge-heuristic { background: rgba(91, 140, 255, 0.15); color: #9ec5ff; }
         .badge-confirmed { background: rgba(81, 207, 102, 0.15); color: var(--success); }
+        .badge-queued { background: rgba(116, 192, 252, 0.15); color: var(--info); }
+        .badge-running { background: rgba(91, 140, 255, 0.15); color: #9ec5ff; }
+        .badge-completed { background: rgba(81, 207, 102, 0.15); color: var(--success); }
+        .badge-failed { background: rgba(255, 107, 107, 0.15); color: var(--critical); }
 
         .btn {
             display: inline-block;
