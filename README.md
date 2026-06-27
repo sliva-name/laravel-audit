@@ -201,9 +201,17 @@ All options live in `config/laravel-audit.php` after publishing.
 | `tools.phpstan.auto_larastan` | `LARAVEL_AUDIT_PHPSTAN_AUTO_LARASTAN` | `true` | Auto-generate Larastan config when no `phpstan.neon` exists |
 | `tools.phpstan.level` | `LARAVEL_AUDIT_PHPSTAN_LEVEL` | `10` | PHPStan level for auto Larastan config (max by default) |
 
-When Larastan is installed and the project has no `phpstan.neon` / `phpstan.neon.dist`, the PHPStan runner generates a temporary Larastan configuration using `paths` and `tools.phpstan.level`.
+When Larastan is installed, the PHPStan runner generates `storage/framework/cache/laravel-audit-phpstan/audit-phpstan.neon` with writable cache paths and your scan paths.
 
 Fatal bootstrap failures (missing traits, autoload errors, worker crashes) appear in the report as `tooling.phpstan.runner` issues parsed from PHPStan's top-level JSON `errors[]`.
+
+After updating this package, restart queue workers so they load the new runner code:
+
+```bash
+php artisan queue:restart
+```
+
+The queue worker timeout must exceed the audit job timeout. For example, if `dashboard.job_timeout` is `180`, run `queue:work` with `--timeout=300` or higher.
 
 ### Reporting
 
@@ -574,8 +582,14 @@ sudo chmod -R ug+rwx storage/app/laravel-audit
 
 ### PHPStan/Larastan not found
 
-- Install dev dependencies in the host app: `composer require --dev larastan/larastan`
+- Install dev dependencies in the host app: `composer require --dev larastan/larastan phpstan/phpstan`
 - Or use `--no-tools` to run built-in analyzers only
+
+### PHPStan shows `non-JSON response` or `Could not write file: /tmp/phpstan/resultCache.php`
+
+- The audit job is probably running on an old queue worker process. Run `php artisan queue:restart` after `composer update`
+- Ensure `storage/framework/cache` is writable by the queue worker user (`www-data` in Docker)
+- Increase the queue worker `--timeout` above `dashboard.job_timeout` (for example `queue:work --timeout=300`)
 
 ---
 

@@ -22,11 +22,9 @@ final class PhpStanRunner extends AbstractProcessRunner
     public function run(string $basePath, array $config): ToolResult
     {
         $binary = $config['binary'] ?? 'vendor/bin/phpstan';
-        /** @var list<string> $temporaryConfigs */
-        $temporaryConfigs = [];
 
         try {
-            $arguments = $this->arguments($basePath, $config, $temporaryConfigs);
+            $arguments = $this->arguments($basePath, $config);
             $cacheDirectory = $this->configurationFactory->cacheDirectory($basePath);
 
             if (! $this->binaryAvailable($basePath, $binary)) {
@@ -46,47 +44,49 @@ final class PhpStanRunner extends AbstractProcessRunner
                 issues: $this->issuesFromOutput($jsonOutput !== '' ? $jsonOutput : $output),
                 output: $output,
             );
-        } finally {
-            foreach ($temporaryConfigs as $configPath) {
-                @unlink($configPath);
-            }
+        } catch (\InvalidArgumentException $exception) {
+            return new ToolResult(
+                tool: 'phpstan',
+                available: true,
+                exitCode: 1,
+                issues: [
+                    new Issue(
+                        ruleId: 'tooling.phpstan.runner',
+                        category: Category::Tooling,
+                        severity: Severity::Error,
+                        title: 'PHPStan runner error',
+                        message: $exception->getMessage(),
+                        location: new Location('phpstan.neon', 1),
+                        recommendation: 'Install PHPStan/Larastan in the environment that runs audit jobs and restart queue workers.',
+                    ),
+                ],
+                output: $exception->getMessage(),
+            );
         }
     }
 
     /**
      * @param  array{arguments?: list<string>, paths?: list<string>, auto_larastan?: bool, level?: int}  $config
-     * @param  list<string>  $temporaryConfigs
      * @return list<string>
      */
-    private function arguments(string $basePath, array $config, array &$temporaryConfigs): array
+    private function arguments(string $basePath, array $config): array
     {
         $arguments = $this->normalizeArguments($config['arguments'] ?? ['analyse', '--error-format=json']);
-
-        if ($this->configurationFactory->projectConfigPath($basePath) !== null) {
-            return $arguments;
-        }
 
         if ($this->hasExplicitConfiguration($arguments) || $this->hasExplicitAnalysisPath($arguments)) {
             return $arguments;
         }
 
-        if ($this->shouldUseLarastan($basePath, $config)) {
-            $configPath = $this->configurationFactory->createLarastanConfig(
-                $basePath,
-                $config['paths'] ?? [],
-                (int) ($config['level'] ?? PhpStanConfigurationFactory::MAX_LEVEL),
-            );
-            $temporaryConfigs[] = $configPath;
-
-            return [
-                ...$arguments,
-                '--configuration='.$configPath,
-            ];
-        }
+        $configPath = $this->configurationFactory->createAuditConfig(
+            $basePath,
+            $config['paths'] ?? [],
+            (int) ($config['level'] ?? PhpStanConfigurationFactory::MAX_LEVEL),
+            $this->shouldUseLarastan($basePath, $config),
+        );
 
         return [
             ...$arguments,
-            ...$this->existingProjectPaths($basePath, $config['paths'] ?? []),
+            '--configuration='.$configPath,
         ];
     }
 
@@ -97,11 +97,16 @@ final class PhpStanRunner extends AbstractProcessRunner
     private function normalizeArguments(array $arguments): array
     {
         $hasNoProgress = false;
+        $hasNoAnsi = false;
         $hasMemoryLimit = false;
 
         foreach ($arguments as $argument) {
             if ($argument === '--no-progress') {
                 $hasNoProgress = true;
+            }
+
+            if ($argument === '--no-ansi') {
+                $hasNoAnsi = true;
             }
 
             if (str_starts_with($argument, '--memory-limit=')) {
@@ -113,6 +118,10 @@ final class PhpStanRunner extends AbstractProcessRunner
             $arguments[] = '--no-progress';
         }
 
+        if (! $hasNoAnsi) {
+            $arguments[] = '--no-ansi';
+        }
+
         if (! $hasMemoryLimit) {
             $arguments[] = '--memory-limit=1G';
         }
@@ -122,21 +131,21 @@ final class PhpStanRunner extends AbstractProcessRunner
 
     private function jsonOutputFromProcess(Process $process): string
     {
-        $stdout = trim($process->getOutput());
+        foreach ([trim($process->getOutput()), trim($process->getErrorOutput())] as $stream) {
+            if ($stream === '') {
+                continue;
+            }
 
-        if ($stdout === '') {
-            return '';
+            if ($this->decodeJsonOutput($stream) !== null) {
+                return $stream;
+            }
+
+            if (preg_match('/\{\s*"(?:totals|files)"\s*:/s', $stream, $matches, PREG_OFFSET_CAPTURE) === 1) {
+                return substr($stream, $matches[0][1]);
+            }
         }
 
-        if ($this->decodeJsonOutput($stdout) !== null) {
-            return $stdout;
-        }
-
-        if (preg_match('/\{\s*"(?:totals|files)"\s*:/s', $stdout, $matches, PREG_OFFSET_CAPTURE) === 1) {
-            return substr($stdout, $matches[0][1]);
-        }
-
-        return $stdout;
+        return trim($process->getOutput());
     }
 
     /**
@@ -200,18 +209,6 @@ final class PhpStanRunner extends AbstractProcessRunner
     }
 
     /**
-     * @param  list<string>  $paths
-     * @return list<string>
-     */
-    private function existingProjectPaths(string $basePath, array $paths): array
-    {
-        return array_values(array_filter(
-            $paths,
-            fn (string $path): bool => file_exists($basePath.DIRECTORY_SEPARATOR.$path),
-        ));
-    }
-
-    /**
      * @return list<Issue>
      */
     private function issuesFromOutput(string $output): array
@@ -219,7 +216,7 @@ final class PhpStanRunner extends AbstractProcessRunner
         $decoded = $this->decodeJsonOutput($output);
 
         if (! is_array($decoded)) {
-            return $output === '' ? [] : [$this->nonJsonIssue($output)];
+            return $this->issuesFromPlainOutput($output);
         }
 
         $issues = [];
@@ -277,19 +274,51 @@ final class PhpStanRunner extends AbstractProcessRunner
             return $issues;
         }
 
+        return $this->issuesFromPlainOutput($output);
+    }
+
+    /**
+     * @return list<Issue>
+     */
+    private function issuesFromPlainOutput(string $output): array
+    {
+        if (trim($output) === '') {
+            return [];
+        }
+
+        if (preg_match('/Could not write file:\s*(.+)$/m', $output, $matches) === 1) {
+            $target = trim($matches[1]);
+            $target = preg_replace('/\s+\(unknown cause\)\s*$/', '', $target) ?? $target;
+
+            return [
+                new Issue(
+                    ruleId: 'tooling.phpstan.runner',
+                    category: Category::Tooling,
+                    severity: Severity::Error,
+                    title: 'PHPStan runner error',
+                    message: 'PHPStan could not write its result cache: '.$target,
+                    location: new Location('phpstan.neon', 1),
+                    recommendation: 'Ensure storage/framework/cache is writable by the queue worker, then run php artisan queue:restart.',
+                    metadata: ['output' => $output],
+                ),
+            ];
+        }
+
         return [$this->nonJsonIssue($output)];
     }
 
     private function nonJsonIssue(string $output): Issue
     {
+        $summary = trim(strtok($output, "\n") ?: $output);
+
         return new Issue(
             ruleId: 'tooling.phpstan',
             category: Category::Tooling,
             severity: Severity::Error,
             title: 'PHPStan analysis failed',
-            message: 'PHPStan returned a non-JSON response.',
-            location: new Location('phpstan.neon'),
-            recommendation: 'Run vendor/bin/phpstan analyse and inspect the raw output.',
+            message: $summary !== '' ? $summary : 'PHPStan returned a non-JSON response.',
+            location: new Location('phpstan.neon', 1),
+            recommendation: 'Run vendor/bin/phpstan analyse and inspect the raw output. Restart queue workers after updating laravel-audit.',
             metadata: ['output' => $output],
         );
     }

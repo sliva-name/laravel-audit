@@ -49,6 +49,74 @@ final class PhpStanConfigurationFactory
         return $directory;
     }
 
+    /**
+     * @param  list<string>  $paths
+     */
+    public function createAuditConfig(string $basePath, array $paths, int $level, bool $includeLarastan): string
+    {
+        $existingPaths = $this->existingProjectPaths($basePath, $paths);
+
+        if ($existingPaths === []) {
+            throw new \InvalidArgumentException('No analysable paths exist for the generated PHPStan configuration.');
+        }
+
+        if ($includeLarastan && $this->larastanExtensionPath($basePath) === null) {
+            throw new \InvalidArgumentException('Larastan extension was not found in the project.');
+        }
+
+        $cacheDirectory = $this->cacheDirectory($basePath);
+        $projectConfig = $this->projectConfigPath($basePath);
+        $includes = [];
+
+        if ($projectConfig !== null) {
+            $includes[] = $this->neonPath($projectConfig);
+        }
+
+        if ($includeLarastan) {
+            $includes[] = $this->neonPath((string) $this->larastanExtensionPath($basePath));
+        }
+
+        $lines = [];
+
+        if ($includes !== []) {
+            $lines[] = 'includes:';
+
+            foreach ($includes as $include) {
+                $lines[] = '    - '.$include;
+            }
+
+            $lines[] = '';
+        }
+
+        $lines[] = 'parameters:';
+        $lines[] = '    tmpDir: '.$this->neonPath($cacheDirectory.DIRECTORY_SEPARATOR.'tmp');
+        $lines[] = '    resultCachePath: '.$this->neonPath($cacheDirectory.DIRECTORY_SEPARATOR.'resultCache.php');
+
+        if ($projectConfig === null) {
+            $lines[] = '    level: '.$level;
+            $lines[] = '    paths:';
+
+            foreach ($existingPaths as $path) {
+                $lines[] = '        - '.$this->neonPath($basePath.DIRECTORY_SEPARATOR.$path);
+            }
+        }
+
+        $configPath = $cacheDirectory.DIRECTORY_SEPARATOR.'audit-phpstan.neon';
+        file_put_contents($configPath, implode(PHP_EOL, $lines).PHP_EOL);
+
+        return $configPath;
+    }
+
+    /**
+     * @deprecated Use createAuditConfig() instead.
+     *
+     * @param  list<string>  $paths
+     */
+    public function createLarastanConfig(string $basePath, array $paths, int $level): string
+    {
+        return $this->createAuditConfig($basePath, $paths, $level, true);
+    }
+
     private function ensureWritableDirectory(string $directory): ?string
     {
         if (is_dir($directory)) {
@@ -60,46 +128,6 @@ final class PhpStanConfigurationFactory
         }
 
         return is_writable($directory) ? $directory : null;
-    }
-
-    /**
-     * @param  list<string>  $paths
-     */
-    public function createLarastanConfig(string $basePath, array $paths, int $level): string
-    {
-        $extension = $this->larastanExtensionPath($basePath);
-
-        if ($extension === null) {
-            throw new \InvalidArgumentException('Larastan extension was not found in the project.');
-        }
-
-        $existingPaths = $this->existingProjectPaths($basePath, $paths);
-
-        if ($existingPaths === []) {
-            throw new \InvalidArgumentException('No analysable paths exist for the generated Larastan configuration.');
-        }
-
-        $cacheDirectory = $this->cacheDirectory($basePath);
-
-        $lines = [
-            'includes:',
-            '    - '.$this->neonPath($extension),
-            '',
-            'parameters:',
-            '    level: '.$level,
-            '    tmpDir: '.$this->neonPath($cacheDirectory.DIRECTORY_SEPARATOR.'tmp'),
-            '    resultCachePath: '.$this->neonPath($cacheDirectory.DIRECTORY_SEPARATOR.'resultCache.php'),
-            '    paths:',
-        ];
-
-        foreach ($existingPaths as $path) {
-            $lines[] = '        - '.$this->neonPath($basePath.DIRECTORY_SEPARATOR.$path);
-        }
-
-        $configPath = tempnam(sys_get_temp_dir(), 'laravel-audit-phpstan-').'.neon';
-        file_put_contents($configPath, implode(PHP_EOL, $lines).PHP_EOL);
-
-        return $configPath;
     }
 
     /**
