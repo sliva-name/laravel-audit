@@ -12,13 +12,13 @@ use Illuminate\Routing\Controller;
 use Illuminate\Support\Collection;
 use LaravelAudit\Analysis\Category;
 use LaravelAudit\Analysis\Severity;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 use LaravelAudit\Audit\AuditEngine;
 use LaravelAudit\Audit\AuditOptions;
 use LaravelAudit\Audit\AuditProgressTracker;
 use LaravelAudit\Audit\AuditRunDispatcher;
 use LaravelAudit\Audit\AuditRunExecutor;
 use LaravelAudit\Repositories\AuditReportRepository;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 final class AuditPanelController extends Controller
 {
