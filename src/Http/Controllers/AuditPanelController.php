@@ -189,11 +189,13 @@ final class AuditPanelController extends Controller
      */
     private function issuesViewData(Request $request, array $payload): array
     {
-        $allIssues = collect($payload['issues'] ?? []);
+        /** @var list<array<string, mixed>> $rawIssues */
+        $rawIssues = is_array($payload['issues'] ?? null) ? $payload['issues'] : [];
+        $allIssues = collect($rawIssues);
         $severityFilter = $this->severityFilter($request);
         $categoryFilter = $this->categoryFilter($request);
         $perPage = 25;
-        $page = max(1, (int) $request->query('page', 1));
+        $page = max(1, (int) $request->query('page', '1'));
 
         $filtered = $allIssues
             ->when(
@@ -237,7 +239,9 @@ final class AuditPanelController extends Controller
             return 'all';
         }
 
-        return Severity::tryFrom($severity)?->value ?? 'all';
+        $matched = Severity::tryFrom($severity);
+
+        return $matched === null ? 'all' : $matched->value;
     }
 
     private function categoryFilter(Request $request): string
@@ -248,7 +252,9 @@ final class AuditPanelController extends Controller
             return 'all';
         }
 
-        return Category::tryFrom($category)?->value ?? 'all';
+        $matched = Category::tryFrom($category);
+
+        return $matched === null ? 'all' : $matched->value;
     }
 
     /**
