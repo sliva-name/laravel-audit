@@ -16,6 +16,7 @@ Route::middleware($middleware)
         Route::get('/reports', [AuditPanelController::class, 'index'])->name('reports.index');
         Route::get('/reports/create', [AuditPanelController::class, 'create'])->name('reports.create');
         Route::post('/reports', [AuditPanelController::class, 'store'])->name('reports.store');
+        Route::get('/reports/{uuid}/download', [AuditPanelController::class, 'download'])->name('reports.download');
         Route::get('/reports/{uuid}', [AuditPanelController::class, 'show'])->name('reports.show');
         Route::post('/reports/{uuid}/confirm-patterns', [AuditPanelController::class, 'confirmPatterns'])->name('reports.confirm-patterns');
         Route::get('/runs', [AuditPanelController::class, 'runsIndex'])->name('runs.index');

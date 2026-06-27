@@ -9,6 +9,10 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Collection;
+use LaravelAudit\Analysis\Category;
+use LaravelAudit\Analysis\Severity;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use LaravelAudit\Audit\AuditEngine;
 use LaravelAudit\Audit\AuditOptions;
 use LaravelAudit\Audit\AuditProgressTracker;
@@ -46,17 +50,40 @@ final class AuditPanelController extends Controller
         ]);
     }
 
-    public function show(string $uuid): View
+    public function show(Request $request, string $uuid): View
     {
         $record = $this->reports->findByUuid($uuid);
 
         abort_if($record === null, 404);
 
+        $issuesView = $this->issuesViewData($request, $record->payload);
+
         return view('laravel-audit::panel.reports.show', [
             'record' => $record,
             'report' => $record->payload,
             'menu' => $this->menu('reports'),
+            ...$issuesView,
         ]);
+    }
+
+    public function download(string $uuid): StreamedResponse
+    {
+        $record = $this->reports->findByUuid($uuid);
+
+        abort_if($record === null, 404);
+
+        $filename = sprintf('laravel-audit-report-%s.json', $record->uuid);
+
+        return response()->streamDownload(
+            static function () use ($record): void {
+                echo json_encode(
+                    $record->toArray(),
+                    JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
+                );
+            },
+            $filename,
+            ['Content-Type' => 'application/json; charset=utf-8'],
+        );
     }
 
     public function create(): View
@@ -154,6 +181,141 @@ final class AuditPanelController extends Controller
         }
 
         return response()->json($this->runPayload($run));
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function issuesViewData(Request $request, array $payload): array
+    {
+        $allIssues = collect($payload['issues'] ?? []);
+        $severityFilter = $this->severityFilter($request);
+        $categoryFilter = $this->categoryFilter($request);
+        $perPage = 25;
+        $page = max(1, (int) $request->query('page', 1));
+
+        $filtered = $allIssues
+            ->when(
+                $severityFilter !== 'all',
+                fn (Collection $issues): Collection => $issues->filter(
+                    fn (array $issue): bool => ($issue['severity'] ?? '') === $severityFilter,
+                ),
+            )
+            ->when(
+                $categoryFilter !== 'all',
+                fn (Collection $issues): Collection => $issues->filter(
+                    fn (array $issue): bool => ($issue['category'] ?? '') === $categoryFilter,
+                ),
+            )
+            ->sort($this->issueSort(...))
+            ->values();
+
+        $total = $filtered->count();
+        $lastPage = max(1, (int) ceil($total / $perPage));
+        $page = min($page, $lastPage);
+
+        return [
+            'issuesPage' => $page,
+            'issuesPerPage' => $perPage,
+            'issuesTotal' => $total,
+            'issuesLastPage' => $lastPage,
+            'issues' => $filtered->slice(($page - 1) * $perPage, $perPage)->values(),
+            'severityFilter' => $severityFilter,
+            'categoryFilter' => $categoryFilter,
+            'severityCounts' => $this->severityCounts($allIssues),
+            'categoryCounts' => $this->categoryCounts($allIssues),
+            'groupBySeverity' => $severityFilter === 'all',
+        ];
+    }
+
+    private function severityFilter(Request $request): string
+    {
+        $severity = $request->string('severity')->trim()->toString();
+
+        if ($severity === '' || $severity === 'all') {
+            return 'all';
+        }
+
+        return Severity::tryFrom($severity)?->value ?? 'all';
+    }
+
+    private function categoryFilter(Request $request): string
+    {
+        $category = $request->string('category')->trim()->toString();
+
+        if ($category === '' || $category === 'all') {
+            return 'all';
+        }
+
+        return Category::tryFrom($category)?->value ?? 'all';
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $issues
+     * @return array<string, int>
+     */
+    private function severityCounts(Collection $issues): array
+    {
+        $counts = ['all' => $issues->count()];
+
+        foreach (Severity::cases() as $severity) {
+            $counts[$severity->value] = $issues
+                ->filter(fn (array $issue): bool => ($issue['severity'] ?? '') === $severity->value)
+                ->count();
+        }
+
+        return $counts;
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $issues
+     * @return array<string, int>
+     */
+    private function categoryCounts(Collection $issues): array
+    {
+        $counts = ['all' => $issues->count()];
+
+        foreach (Category::cases() as $category) {
+            $counts[$category->value] = $issues
+                ->filter(fn (array $issue): bool => ($issue['category'] ?? '') === $category->value)
+                ->count();
+        }
+
+        return $counts;
+    }
+
+    /**
+     * @param  array<string, mixed>  $left
+     * @param  array<string, mixed>  $right
+     */
+    private function issueSort(array $left, array $right): int
+    {
+        $leftSeverity = Severity::tryFrom((string) ($left['severity'] ?? '')) ?? Severity::Info;
+        $rightSeverity = Severity::tryFrom((string) ($right['severity'] ?? '')) ?? Severity::Info;
+
+        $comparison = $rightSeverity->rank() <=> $leftSeverity->rank();
+
+        if ($comparison !== 0) {
+            return $comparison;
+        }
+
+        $comparison = strcmp((string) ($left['category'] ?? ''), (string) ($right['category'] ?? ''));
+
+        if ($comparison !== 0) {
+            return $comparison;
+        }
+
+        $comparison = strcmp(
+            (string) ($left['location']['file'] ?? ''),
+            (string) ($right['location']['file'] ?? ''),
+        );
+
+        if ($comparison !== 0) {
+            return $comparison;
+        }
+
+        return ((int) ($left['location']['line'] ?? 0)) <=> ((int) ($right['location']['line'] ?? 0));
     }
 
     /**

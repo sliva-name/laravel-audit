@@ -3,8 +3,13 @@
 @section('title', 'Report · Laravel Audit')
 
 @section('content')
-    <h1 class="page-title">Report</h1>
-    <p class="page-subtitle">{{ $record->created_at?->format('Y-m-d H:i:s') }} · {{ number_format((float) $record->duration_seconds, 2) }}s</p>
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">Report</h1>
+            <p class="page-subtitle">{{ $record->created_at?->format('Y-m-d H:i:s') }} · {{ number_format((float) $record->duration_seconds, 2) }}s</p>
+        </div>
+        <a class="btn btn-secondary" href="{{ route('laravel-audit.reports.download', $record->uuid) }}">Download JSON</a>
+    </div>
 
     <div class="card">
         <div class="grid">
@@ -15,12 +20,95 @@
         </div>
     </div>
 
+    @php
+        $categoryLabels = [
+            'security' => 'Security',
+            'performance' => 'Performance',
+            'reliability' => 'Reliability',
+            'best-practices' => 'Best practices',
+            'code-quality' => 'Code quality',
+            'tooling' => 'Tooling',
+        ];
+        $severityTabs = [
+            'all' => 'All',
+            'critical' => 'Critical',
+            'error' => 'Error',
+            'warning' => 'Warning',
+            'info' => 'Info',
+        ];
+        $issueQuery = fn (array $overrides = []): string => http_build_query(array_filter([
+            'severity' => ($overrides['severity'] ?? $severityFilter) !== 'all' ? ($overrides['severity'] ?? $severityFilter) : null,
+            'category' => ($overrides['category'] ?? $categoryFilter) !== 'all' ? ($overrides['category'] ?? $categoryFilter) : null,
+            'page' => $overrides['page'] ?? null,
+        ], fn ($value) => $value !== null && $value !== ''));
+    @endphp
+
     <div class="card">
-        <h2 style="margin-top:0;">Issues</h2>
-        @forelse ($report['issues'] ?? [] as $issue)
+        <div class="issues-toolbar">
+            <div>
+                <h2 style="margin:0 0 12px;">Issues</h2>
+                <p class="muted" style="margin:0;">
+                    @if ($issuesTotal === 0)
+                        No issues match the current filters.
+                    @else
+                        Showing {{ ($issuesPage - 1) * $issuesPerPage + 1 }}–{{ min($issuesPage * $issuesPerPage, $issuesTotal) }} of {{ $issuesTotal }}
+                    @endif
+                </p>
+            </div>
+
+            <form class="issues-filter-form" method="get" action="{{ route('laravel-audit.reports.show', $record->uuid) }}">
+                @if ($severityFilter !== 'all')
+                    <input type="hidden" name="severity" value="{{ $severityFilter }}">
+                @endif
+                <label class="issues-filter-label">
+                    Category
+                    <select name="category" onchange="this.form.submit()">
+                        <option value="all" @selected($categoryFilter === 'all')>All categories ({{ $categoryCounts['all'] }})</option>
+                        @foreach ($categoryLabels as $value => $label)
+                            @if (($categoryCounts[$value] ?? 0) > 0)
+                                <option value="{{ $value }}" @selected($categoryFilter === $value)>
+                                    {{ $label }} ({{ $categoryCounts[$value] }})
+                                </option>
+                            @endif
+                        @endforeach
+                    </select>
+                </label>
+            </form>
+        </div>
+
+        <div class="filter-tabs">
+            @foreach ($severityTabs as $value => $label)
+                @php
+                    $count = $severityCounts[$value] ?? 0;
+                    $isActive = $severityFilter === $value;
+                    $tabQuery = $issueQuery(['severity' => $value === 'all' ? null : $value, 'page' => null]);
+                @endphp
+                <a
+                    href="{{ route('laravel-audit.reports.show', $record->uuid).($tabQuery !== '' ? '?'.$tabQuery : '') }}"
+                    @class(['filter-tab', 'active' => $isActive, 'disabled' => $count === 0 && $value !== 'all'])
+                    @if ($count === 0 && $value !== 'all') aria-disabled="true" @endif
+                >
+                    {{ $label }}
+                    <span class="filter-tab-count">{{ $count }}</span>
+                </a>
+            @endforeach
+        </div>
+
+        @php $previousSeverity = null; @endphp
+        @forelse ($issues as $issue)
+            @if ($groupBySeverity && ($issue['severity'] ?? '') !== $previousSeverity)
+                @php $previousSeverity = $issue['severity'] ?? ''; @endphp
+                <div class="issue-section-header">
+                    <span class="badge badge-{{ $previousSeverity }}">{{ strtoupper($previousSeverity) }}</span>
+                    <span class="muted">{{ $severityCounts[$previousSeverity] ?? 0 }} issue(s)</span>
+                </div>
+            @endif
             <div class="issue">
                 <div>
                     <span class="badge badge-{{ $issue['severity'] }}">{{ strtoupper($issue['severity']) }}</span>
+                    @if (! empty($issue['category']))
+                        <span class="badge badge-category badge-category-{{ $issue['category'] }}">{{ $categoryLabels[$issue['category']] ?? $issue['category'] }}</span>
+                    @endif
                     <strong>{{ $issue['title'] }}</strong>
                     <span class="muted">[{{ $issue['ruleId'] }}]</span>
                 </div>
@@ -31,8 +119,28 @@
                 @endif
             </div>
         @empty
-            <p class="muted">No issues found.</p>
+            @if (($report['issues'] ?? []) === [])
+                <p class="muted">No issues found.</p>
+            @endif
         @endforelse
+
+        @if ($issuesLastPage > 1)
+            <nav class="pagination" aria-label="Issues pagination">
+                @if ($issuesPage > 1)
+                    <a class="pagination-link" href="{{ route('laravel-audit.reports.show', $record->uuid).'?'.$issueQuery(['page' => $issuesPage - 1]) }}">Previous</a>
+                @else
+                    <span class="pagination-link disabled">Previous</span>
+                @endif
+
+                <span class="pagination-status">Page {{ $issuesPage }} of {{ $issuesLastPage }}</span>
+
+                @if ($issuesPage < $issuesLastPage)
+                    <a class="pagination-link" href="{{ route('laravel-audit.reports.show', $record->uuid).'?'.$issueQuery(['page' => $issuesPage + 1]) }}">Next</a>
+                @else
+                    <span class="pagination-link disabled">Next</span>
+                @endif
+            </nav>
+        @endif
     </div>
 
     @php

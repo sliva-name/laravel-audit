@@ -96,6 +96,7 @@ final class AuditPanelTest extends TestCase
                 'payload' => [
                     'issues' => [[
                         'ruleId' => 'security.raw-sql',
+                        'category' => 'security',
                         'severity' => 'error',
                         'title' => 'Raw SQL usage',
                         'message' => 'Avoid raw SQL in controllers.',
@@ -110,7 +111,80 @@ final class AuditPanelTest extends TestCase
         $this->get('/audit/reports/'.$snapshot->uuid)
             ->assertOk()
             ->assertSee('Raw SQL usage')
-            ->assertSee('app/Http/Controllers/Foo.php');
+            ->assertSee('app/Http/Controllers/Foo.php')
+            ->assertSee('Download JSON')
+            ->assertSee('Security');
+    }
+
+    public function test_report_can_be_downloaded_as_json(): void
+    {
+        $store = new FileAuditReportStore($this->reportsDirectory);
+        $snapshot = $store->store(new AuditReport(
+            issues: [],
+            toolResults: [],
+            durationSeconds: 0.5,
+        ), new AuditOptions(noTools: true));
+
+        $this->get('/audit/reports/'.$snapshot->uuid.'/download')
+            ->assertOk()
+            ->assertHeader('content-disposition')
+            ->assertJsonPath('uuid', $snapshot->uuid);
+    }
+
+    public function test_report_issues_support_pagination_and_filters(): void
+    {
+        $store = new FileAuditReportStore($this->reportsDirectory);
+        $snapshot = $store->store(new AuditReport(
+            issues: [],
+            toolResults: [],
+            durationSeconds: 0.5,
+        ), new AuditOptions(noTools: true));
+
+        $issues = [];
+
+        for ($index = 1; $index <= 30; $index++) {
+            $issues[] = [
+                'ruleId' => 'code-quality.example-'.$index,
+                'category' => $index % 2 === 0 ? 'security' : 'code-quality',
+                'severity' => $index <= 5 ? 'critical' : 'warning',
+                'title' => 'Issue '.$index,
+                'message' => 'Message '.$index,
+                'location' => ['file' => 'app/Example'.$index.'.php', 'line' => $index],
+                'recommendation' => null,
+            ];
+        }
+
+        file_put_contents(
+            $this->reportsDirectory.'/'.$snapshot->uuid.'.json',
+            json_encode([
+                ...$snapshot->toArray(),
+                'payload' => [
+                    'issues' => $issues,
+                    'patternSuggestions' => [],
+                ],
+            ], JSON_THROW_ON_ERROR),
+        );
+
+        $this->get('/audit/reports/'.$snapshot->uuid)
+            ->assertOk()
+            ->assertSee('Showing 1–25 of 30')
+            ->assertSee('Issue 1')
+            ->assertDontSee('Issue 30');
+
+        $this->get('/audit/reports/'.$snapshot->uuid.'?page=2')
+            ->assertOk()
+            ->assertSee('Showing 26–30 of 30')
+            ->assertSee('Issue 30');
+
+        $this->get('/audit/reports/'.$snapshot->uuid.'?severity=critical')
+            ->assertOk()
+            ->assertSee('Showing 1–5 of 5')
+            ->assertSee('Issue 1')
+            ->assertDontSee('Issue 6');
+
+        $this->get('/audit/reports/'.$snapshot->uuid.'?category=security')
+            ->assertOk()
+            ->assertSee('Showing 1–15 of 15');
     }
 
     public function test_run_analysis_redirects_to_progress_page(): void

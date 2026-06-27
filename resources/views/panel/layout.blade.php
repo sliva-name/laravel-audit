@@ -179,6 +179,158 @@
             text-decoration: none;
         }
 
+        .btn-secondary {
+            background: var(--panel-hover);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .page-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .page-header .page-subtitle {
+            margin-bottom: 0;
+        }
+
+        .issues-toolbar {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .issues-filter-form {
+            margin: 0;
+        }
+
+        .issues-filter-label {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin: 0;
+            color: var(--muted);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .issues-filter-label select {
+            min-width: 220px;
+            background: var(--panel-hover);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 10px;
+            font-size: 14px;
+        }
+
+        .filter-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .filter-tab {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: var(--panel-hover);
+            color: var(--text);
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 600;
+            border: 1px solid transparent;
+        }
+
+        .filter-tab:hover {
+            border-color: var(--border);
+        }
+
+        .filter-tab.active {
+            background: var(--accent-soft);
+            color: #dbeafe;
+            border-color: rgba(91, 140, 255, 0.35);
+        }
+
+        .filter-tab.disabled {
+            opacity: 0.45;
+            pointer-events: none;
+        }
+
+        .filter-tab-count {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .filter-tab.active .filter-tab-count {
+            color: #dbeafe;
+        }
+
+        .issue-section-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 18px 0 8px;
+            margin-top: 4px;
+            border-top: 1px solid var(--border);
+        }
+
+        .issue-section-header:first-of-type {
+            border-top: 0;
+            margin-top: 0;
+            padding-top: 0;
+        }
+
+        .badge-category {
+            background: rgba(147, 161, 179, 0.15);
+            color: var(--muted);
+        }
+
+        .badge-category-security { background: rgba(255, 107, 107, 0.12); color: var(--critical); }
+        .badge-category-performance { background: rgba(254, 202, 87, 0.12); color: var(--warning); }
+        .badge-category-reliability { background: rgba(255, 135, 135, 0.12); color: var(--error); }
+        .badge-category-best-practices { background: rgba(116, 192, 252, 0.12); color: var(--info); }
+        .badge-category-code-quality { background: rgba(91, 140, 255, 0.12); color: #9ec5ff; }
+        .badge-category-tooling { background: rgba(147, 161, 179, 0.18); color: var(--muted); }
+
+        .pagination {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
+        }
+
+        .pagination-link {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .pagination-link.disabled {
+            color: var(--muted);
+            pointer-events: none;
+        }
+
+        .pagination-status {
+            color: var(--muted);
+            font-size: 14px;
+        }
+
         .btn:disabled {
             opacity: 0.75;
             cursor: wait;
