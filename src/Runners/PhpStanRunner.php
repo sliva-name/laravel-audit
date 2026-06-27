@@ -70,7 +70,7 @@ final class PhpStanRunner extends AbstractProcessRunner
             $configPath = $this->configurationFactory->createLarastanConfig(
                 $basePath,
                 $config['paths'] ?? [],
-                (int) ($config['level'] ?? 5),
+                (int) ($config['level'] ?? PhpStanConfigurationFactory::MAX_LEVEL),
             );
             $temporaryConfigs[] = $configPath;
 
@@ -155,38 +155,106 @@ final class PhpStanRunner extends AbstractProcessRunner
     {
         $decoded = json_decode($output, true);
 
-        if (! is_array($decoded) || ! isset($decoded['files']) || ! is_array($decoded['files'])) {
-            return $output === '' ? [] : [
-                new Issue(
-                    ruleId: 'tooling.phpstan',
-                    category: Category::Tooling,
-                    severity: Severity::Error,
-                    title: 'PHPStan analysis failed',
-                    message: 'PHPStan returned a non-JSON response.',
-                    location: new Location('phpstan.neon'),
-                    recommendation: 'Run vendor/bin/phpstan analyse and inspect the raw output.',
-                    metadata: ['output' => $output],
-                ),
-            ];
+        if (! is_array($decoded)) {
+            return $output === '' ? [] : [$this->nonJsonIssue($output)];
         }
 
         $issues = [];
 
-        foreach ($decoded['files'] as $file => $details) {
-            foreach (($details['messages'] ?? []) as $message) {
+        if (isset($decoded['files']) && is_array($decoded['files'])) {
+            foreach ($decoded['files'] as $file => $details) {
+                if (! is_array($details)) {
+                    continue;
+                }
+
+                foreach (($details['messages'] ?? []) as $message) {
+                    if (! is_array($message)) {
+                        continue;
+                    }
+
+                    $issues[] = new Issue(
+                        ruleId: is_string($message['identifier'] ?? null) ? $message['identifier'] : 'tooling.phpstan',
+                        category: Category::Tooling,
+                        severity: Severity::Error,
+                        title: 'PHPStan issue',
+                        message: is_string($message['message'] ?? null) ? $message['message'] : 'PHPStan reported an issue.',
+                        location: new Location((string) $file, (int) ($message['line'] ?? 1)),
+                        recommendation: 'Fix the static analysis error or add a narrow ignore with justification.',
+                        metadata: $message,
+                    );
+                }
+            }
+        }
+
+        if (isset($decoded['errors']) && is_array($decoded['errors'])) {
+            foreach ($decoded['errors'] as $index => $error) {
+                if (! is_string($error) || trim($error) === '') {
+                    continue;
+                }
+
+                [$file, $line] = $this->locationFromRunnerError($error);
+
                 $issues[] = new Issue(
-                    ruleId: $message['identifier'] ?? 'tooling.phpstan',
+                    ruleId: 'tooling.phpstan.runner',
                     category: Category::Tooling,
                     severity: Severity::Error,
-                    title: 'PHPStan issue',
-                    message: $message['message'] ?? 'PHPStan reported an issue.',
-                    location: new Location((string) $file, (int) ($message['line'] ?? 1)),
-                    recommendation: 'Fix the static analysis error or add a narrow ignore with justification.',
-                    metadata: $message,
+                    title: 'PHPStan runner error',
+                    message: $this->summaryFromRunnerError($error),
+                    location: new Location($file, $line),
+                    recommendation: 'Fix the bootstrap or configuration error, then rerun PHPStan.',
+                    metadata: [
+                        'error' => $error,
+                        'index' => $index,
+                    ],
                 );
             }
         }
 
-        return $issues;
+        if ($issues !== [] || $output === '') {
+            return $issues;
+        }
+
+        return [$this->nonJsonIssue($output)];
+    }
+
+    private function nonJsonIssue(string $output): Issue
+    {
+        return new Issue(
+            ruleId: 'tooling.phpstan',
+            category: Category::Tooling,
+            severity: Severity::Error,
+            title: 'PHPStan analysis failed',
+            message: 'PHPStan returned a non-JSON response.',
+            location: new Location('phpstan.neon'),
+            recommendation: 'Run vendor/bin/phpstan analyse and inspect the raw output.',
+            metadata: ['output' => $output],
+        );
+    }
+
+    /**
+     * @return array{0: string, 1: int}
+     */
+    private function locationFromRunnerError(string $error): array
+    {
+        if (preg_match('/\bat\s+(\S+\.php):(\d+)\b/', $error, $matches) === 1) {
+            return [$matches[1], (int) $matches[2]];
+        }
+
+        if (preg_match('/\bin\s+(\S+\.php)\s+on line\s+(\d+)/', $error, $matches) === 1) {
+            return [$matches[1], (int) $matches[2]];
+        }
+
+        return ['phpstan.neon', 1];
+    }
+
+    private function summaryFromRunnerError(string $error): string
+    {
+        if (preg_match('/\n\s*([^\n]+)\n\n/s', $error, $matches) === 1) {
+            return trim($matches[1]);
+        }
+
+        $firstLine = trim(strtok($error, "\n") ?: $error);
+
+        return strlen($firstLine) > 240 ? substr($firstLine, 0, 237).'...' : $firstLine;
     }
 }

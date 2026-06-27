@@ -6,6 +6,8 @@ namespace LaravelAudit\Runners;
 
 final class PhpStanConfigurationFactory
 {
+    public const MAX_LEVEL = 10;
+
     public function larastanExtensionPath(string $basePath): ?string
     {
         $path = $basePath.DIRECTORY_SEPARATOR.'vendor'.DIRECTORY_SEPARATOR.'larastan'.DIRECTORY_SEPARATOR.'larastan'.DIRECTORY_SEPARATOR.'extension.neon';

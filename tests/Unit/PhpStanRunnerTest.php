@@ -122,6 +122,37 @@ final class PhpStanRunnerTest extends TestCase
         self::assertStringContainsString('progress output', $result->output);
     }
 
+    public function test_parses_top_level_errors_from_json_output(): void
+    {
+        $basePath = $this->makeProject(<<<'PHP'
+            #!/usr/bin/env php
+            <?php
+
+            echo json_encode([
+                'totals' => ['errors' => 1, 'file_errors' => 0],
+                'files' => [],
+                'errors' => [
+                    "Child process error (exit code 255):\n\n  Trait \"Laravel\\Sanctum\\HasApiTokens\" not found\n\n  at app/Models/User.php:11",
+                ],
+            ]);
+            PHP);
+
+        mkdir($basePath.'/app', 0777, true);
+
+        $result = (new PhpStanRunner)->run($basePath, [
+            'binary' => 'vendor/bin/phpstan',
+            'arguments' => ['analyse', '--error-format=json'],
+            'paths' => ['app'],
+            'auto_larastan' => false,
+        ]);
+
+        self::assertCount(1, $result->issues);
+        self::assertSame('tooling.phpstan.runner', $result->issues[0]->ruleId);
+        self::assertSame('Trait "Laravel\Sanctum\HasApiTokens" not found', $result->issues[0]->message);
+        self::assertSame('app/Models/User.php', $result->issues[0]->location->file);
+        self::assertSame(11, $result->issues[0]->location->line);
+    }
+
     private function makeProject(?string $binaryContents = null, bool $withLarastan = false): string
     {
         $basePath = sys_get_temp_dir().'/laravel-audit-phpstan-runner-'.bin2hex(random_bytes(6));

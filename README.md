@@ -199,9 +199,11 @@ All options live in `config/laravel-audit.php` after publishing.
 | `tools.phpstan.enabled` | — | `true` | Run PHPStan |
 | `tools.phpstan.binary` | `LARAVEL_AUDIT_PHPSTAN_BINARY` | `vendor/bin/phpstan` | PHPStan executable |
 | `tools.phpstan.auto_larastan` | `LARAVEL_AUDIT_PHPSTAN_AUTO_LARASTAN` | `true` | Auto-generate Larastan config when no `phpstan.neon` exists |
-| `tools.phpstan.level` | `LARAVEL_AUDIT_PHPSTAN_LEVEL` | `5` | PHPStan level for auto Larastan config |
+| `tools.phpstan.level` | `LARAVEL_AUDIT_PHPSTAN_LEVEL` | `10` | PHPStan level for auto Larastan config (max by default) |
 
 When Larastan is installed and the project has no `phpstan.neon` / `phpstan.neon.dist`, the PHPStan runner generates a temporary Larastan configuration using `paths` and `tools.phpstan.level`.
+
+Fatal bootstrap failures (missing traits, autoload errors, worker crashes) appear in the report as `tooling.phpstan.runner` issues parsed from PHPStan's top-level JSON `errors[]`.
 
 ### Reporting
 
