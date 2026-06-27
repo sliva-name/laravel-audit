@@ -52,8 +52,8 @@
                                 {{ $flags->implode(', ') }}
                             @endif
                         </td>
-                        <td class="muted">{{ $run['created_at'] ?? '—' }}</td>
-                        <td class="muted">{{ $run['updated_at'] ?? '—' }}</td>
+                        <td class="muted">@include('laravel-audit::panel.partials.time', ['value' => $run['created_at'] ?? null])</td>
+                        <td class="muted">@include('laravel-audit::panel.partials.time', ['value' => $run['updated_at'] ?? null])</td>
                         <td>
                             @if ($status === 'completed' && ! empty($run['report_uuid']))
                                 <a class="link" href="{{ route('laravel-audit.reports.show', $run['report_uuid']) }}">Report</a>

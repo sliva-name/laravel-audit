@@ -67,7 +67,9 @@ final class AuditPanelTest extends TestCase
         $this->get('/audit/runs')
             ->assertOk()
             ->assertSee('Jobs')
-            ->assertSee('COMPLETED');
+            ->assertSee('COMPLETED')
+            ->assertSee(' · ')
+            ->assertDontSee('T14:30:00');
     }
 
     public function test_reports_index_lists_saved_reports(): void

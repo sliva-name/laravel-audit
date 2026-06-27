@@ -87,7 +87,7 @@
                 <tbody>
                 @foreach ($reports as $report)
                     <tr>
-                        <td>{{ $report->created_at?->format('Y-m-d H:i') }}</td>
+                        <td>@include('laravel-audit::panel.partials.time', ['value' => $report->created_at])</td>
                         <td>{{ $report->issues_count }}</td>
                         <td>
                             @if ($report->critical_count)<span class="badge badge-critical">{{ $report->critical_count }} critical</span>@endif
@@ -95,7 +95,7 @@
                             @if ($report->warning_count)<span class="badge badge-warning">{{ $report->warning_count }} warning</span>@endif
                             @if ($report->info_count)<span class="badge badge-info">{{ $report->info_count }} info</span>@endif
                         </td>
-                        <td>{{ number_format((float) $report->duration_seconds, 2) }}s</td>
+                        <td>{{ \LaravelAudit\Support\PanelTime::duration((float) $report->duration_seconds) }}</td>
                         <td><a class="link" href="{{ route('laravel-audit.reports.show', $report->uuid) }}">Open</a></td>
                     </tr>
                 @endforeach

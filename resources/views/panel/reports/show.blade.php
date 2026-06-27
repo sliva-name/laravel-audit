@@ -6,7 +6,10 @@
     <div class="page-header">
         <div>
             <h1 class="page-title">Report</h1>
-            <p class="page-subtitle">{{ $record->created_at?->format('Y-m-d H:i:s') }} · {{ number_format((float) $record->duration_seconds, 2) }}s</p>
+            <p class="page-subtitle">
+                @include('laravel-audit::panel.partials.time', ['value' => $record->created_at])
+                · {{ \LaravelAudit\Support\PanelTime::duration((float) $record->duration_seconds) }}
+            </p>
         </div>
         <a class="btn btn-secondary" href="{{ route('laravel-audit.reports.download', $record->uuid) }}">Download JSON</a>
     </div>
