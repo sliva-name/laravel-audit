@@ -24,7 +24,10 @@ final class PhpStanRunnerTest extends TestCase
 
         $output = json_decode($result->output, true);
 
-        self::assertSame(['analyse', '--error-format=json', 'app', 'routes'], $output['argv']);
+        self::assertSame(
+            ['analyse', '--error-format=json', '--no-progress', '--memory-limit=1G', 'app', 'routes'],
+            $output['argv'],
+        );
     }
 
     public function test_keeps_arguments_when_phpstan_config_exists(): void
@@ -42,7 +45,7 @@ final class PhpStanRunnerTest extends TestCase
 
         $output = json_decode($result->output, true);
 
-        self::assertSame(['analyse', '--error-format=json'], $output['argv']);
+        self::assertSame(['analyse', '--error-format=json', '--no-progress', '--memory-limit=1G'], $output['argv']);
     }
 
     public function test_uses_generated_larastan_config_when_extension_is_available(): void
@@ -61,10 +64,12 @@ final class PhpStanRunnerTest extends TestCase
 
         $output = json_decode($result->output, true);
 
-        self::assertCount(3, $output['argv']);
+        self::assertCount(5, $output['argv']);
         self::assertSame('analyse', $output['argv'][0]);
         self::assertSame('--error-format=json', $output['argv'][1]);
-        self::assertStringStartsWith('--configuration=', $output['argv'][2]);
+        self::assertSame('--no-progress', $output['argv'][2]);
+        self::assertSame('--memory-limit=1G', $output['argv'][3]);
+        self::assertStringStartsWith('--configuration=', $output['argv'][4]);
         self::assertFileDoesNotExist(substr($output['argv'][2], strlen('--configuration=')));
     }
 
@@ -83,7 +88,7 @@ final class PhpStanRunnerTest extends TestCase
 
         $output = json_decode($result->output, true);
 
-        self::assertSame(['analyse', '--error-format=json', 'app'], $output['argv']);
+        self::assertSame(['analyse', '--error-format=json', '--no-progress', '--memory-limit=1G', 'app'], $output['argv']);
     }
 
     public function test_parses_json_stdout_when_phpstan_writes_progress_to_stderr(): void
@@ -120,6 +125,41 @@ final class PhpStanRunnerTest extends TestCase
         self::assertCount(1, $result->issues);
         self::assertSame('example.issue', $result->issues[0]->ruleId);
         self::assertStringContainsString('progress output', $result->output);
+    }
+
+    public function test_parses_json_from_stdout_when_progress_bar_is_present(): void
+    {
+        $basePath = $this->makeProject(<<<'PHP'
+            #!/usr/bin/env php
+            <?php
+
+            echo "\x1B[1G\x1B[2K 423/423 [============================] 100%\n";
+            echo json_encode([
+                'files' => [
+                    'app/Foo.php' => [
+                        'messages' => [
+                            [
+                                'message' => 'Example PHPStan issue.',
+                                'line' => 12,
+                                'identifier' => 'example.issue',
+                            ],
+                        ],
+                    ],
+                ],
+            ]);
+            PHP);
+
+        mkdir($basePath.'/app', 0777, true);
+
+        $result = (new PhpStanRunner)->run($basePath, [
+            'binary' => 'vendor/bin/phpstan',
+            'arguments' => ['analyse', '--error-format=json'],
+            'paths' => ['app'],
+            'auto_larastan' => false,
+        ]);
+
+        self::assertCount(1, $result->issues);
+        self::assertSame('example.issue', $result->issues[0]->ruleId);
     }
 
     public function test_parses_top_level_errors_from_json_output(): void

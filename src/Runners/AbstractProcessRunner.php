@@ -10,10 +10,15 @@ abstract class AbstractProcessRunner
 {
     /**
      * @param  list<string>  $arguments
+     * @param  array<string, string>  $environment
      */
-    protected function runProcess(string $basePath, string $binary, array $arguments): Process
+    protected function runProcess(string $basePath, string $binary, array $arguments, array $environment = []): Process
     {
-        $process = new Process(array_merge([$this->resolveBinary($basePath, $binary)], $arguments), $basePath);
+        $process = new Process(
+            array_merge([$this->resolveBinary($basePath, $binary)], $arguments),
+            $basePath,
+            $environment !== [] ? $environment : null,
+        );
         $process->setTimeout(300);
         $process->run();
 

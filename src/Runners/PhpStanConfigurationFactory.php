@@ -28,6 +28,40 @@ final class PhpStanConfigurationFactory
         return null;
     }
 
+    public function cacheDirectory(string $basePath): string
+    {
+        $storageDirectory = $basePath.DIRECTORY_SEPARATOR.'storage'.DIRECTORY_SEPARATOR.'framework'
+            .DIRECTORY_SEPARATOR.'cache'.DIRECTORY_SEPARATOR.'laravel-audit-phpstan';
+
+        $directory = $this->ensureWritableDirectory($storageDirectory)
+            ?? $this->ensureWritableDirectory(sys_get_temp_dir().DIRECTORY_SEPARATOR.'laravel-audit-phpstan-'.sha1($basePath));
+
+        if ($directory === null) {
+            throw new \RuntimeException('Unable to create a writable PHPStan cache directory.');
+        }
+
+        $tmpDirectory = $directory.DIRECTORY_SEPARATOR.'tmp';
+
+        if (! is_dir($tmpDirectory)) {
+            mkdir($tmpDirectory, 0775, true);
+        }
+
+        return $directory;
+    }
+
+    private function ensureWritableDirectory(string $directory): ?string
+    {
+        if (is_dir($directory)) {
+            return is_writable($directory) ? $directory : null;
+        }
+
+        if (! @mkdir($directory, 0775, true) && ! is_dir($directory)) {
+            return null;
+        }
+
+        return is_writable($directory) ? $directory : null;
+    }
+
     /**
      * @param  list<string>  $paths
      */
@@ -45,12 +79,16 @@ final class PhpStanConfigurationFactory
             throw new \InvalidArgumentException('No analysable paths exist for the generated Larastan configuration.');
         }
 
+        $cacheDirectory = $this->cacheDirectory($basePath);
+
         $lines = [
             'includes:',
             '    - '.$this->neonPath($extension),
             '',
             'parameters:',
             '    level: '.$level,
+            '    tmpDir: '.$this->neonPath($cacheDirectory.DIRECTORY_SEPARATOR.'tmp'),
+            '    resultCachePath: '.$this->neonPath($cacheDirectory.DIRECTORY_SEPARATOR.'resultCache.php'),
             '    paths:',
         ];
 

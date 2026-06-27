@@ -34,6 +34,9 @@ final class PhpStanConfigurationFactoryTest extends TestCase
             self::assertIsString($contents);
             self::assertStringContainsString('vendor/larastan/larastan/extension.neon', $contents);
             self::assertStringContainsString('level: 5', $contents);
+            self::assertStringContainsString('tmpDir:', $contents);
+            self::assertStringContainsString('resultCachePath:', $contents);
+            self::assertStringContainsString('resultCache.php', $contents);
             self::assertStringContainsString($basePath.'/app', str_replace('\\', '/', $contents));
             self::assertStringContainsString($basePath.'/routes', str_replace('\\', '/', $contents));
             self::assertStringNotContainsString('missing', $contents);

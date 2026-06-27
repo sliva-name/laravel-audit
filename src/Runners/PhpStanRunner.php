@@ -8,6 +8,7 @@ use LaravelAudit\Analysis\Category;
 use LaravelAudit\Analysis\Issue;
 use LaravelAudit\Analysis\Location;
 use LaravelAudit\Analysis\Severity;
+use Symfony\Component\Process\Process;
 
 final class PhpStanRunner extends AbstractProcessRunner
 {
@@ -26,13 +27,16 @@ final class PhpStanRunner extends AbstractProcessRunner
 
         try {
             $arguments = $this->arguments($basePath, $config, $temporaryConfigs);
+            $cacheDirectory = $this->configurationFactory->cacheDirectory($basePath);
 
             if (! $this->binaryAvailable($basePath, $binary)) {
                 return new ToolResult('phpstan', false, 127, output: 'PHPStan binary was not found.');
             }
 
-            $process = $this->runProcess($basePath, $binary, $arguments);
-            $jsonOutput = trim($process->getOutput());
+            $process = $this->runProcess($basePath, $binary, $arguments, [
+                'TMPDIR' => $cacheDirectory.DIRECTORY_SEPARATOR.'tmp',
+            ]);
+            $jsonOutput = $this->jsonOutputFromProcess($process);
             $output = trim($jsonOutput.PHP_EOL.$process->getErrorOutput());
 
             return new ToolResult(
@@ -56,7 +60,7 @@ final class PhpStanRunner extends AbstractProcessRunner
      */
     private function arguments(string $basePath, array $config, array &$temporaryConfigs): array
     {
-        $arguments = $config['arguments'] ?? ['analyse', '--error-format=json'];
+        $arguments = $this->normalizeArguments($config['arguments'] ?? ['analyse', '--error-format=json']);
 
         if ($this->configurationFactory->projectConfigPath($basePath) !== null) {
             return $arguments;
@@ -84,6 +88,65 @@ final class PhpStanRunner extends AbstractProcessRunner
             ...$arguments,
             ...$this->existingProjectPaths($basePath, $config['paths'] ?? []),
         ];
+    }
+
+    /**
+     * @param  list<string>  $arguments
+     * @return list<string>
+     */
+    private function normalizeArguments(array $arguments): array
+    {
+        $hasNoProgress = false;
+        $hasMemoryLimit = false;
+
+        foreach ($arguments as $argument) {
+            if ($argument === '--no-progress') {
+                $hasNoProgress = true;
+            }
+
+            if (str_starts_with($argument, '--memory-limit=')) {
+                $hasMemoryLimit = true;
+            }
+        }
+
+        if (! $hasNoProgress) {
+            $arguments[] = '--no-progress';
+        }
+
+        if (! $hasMemoryLimit) {
+            $arguments[] = '--memory-limit=1G';
+        }
+
+        return $arguments;
+    }
+
+    private function jsonOutputFromProcess(Process $process): string
+    {
+        $stdout = trim($process->getOutput());
+
+        if ($stdout === '') {
+            return '';
+        }
+
+        if ($this->decodeJsonOutput($stdout) !== null) {
+            return $stdout;
+        }
+
+        if (preg_match('/\{\s*"(?:totals|files)"\s*:/s', $stdout, $matches, PREG_OFFSET_CAPTURE) === 1) {
+            return substr($stdout, $matches[0][1]);
+        }
+
+        return $stdout;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function decodeJsonOutput(string $output): ?array
+    {
+        $decoded = json_decode($output, true);
+
+        return is_array($decoded) ? $decoded : null;
     }
 
     /**
@@ -153,7 +216,7 @@ final class PhpStanRunner extends AbstractProcessRunner
      */
     private function issuesFromOutput(string $output): array
     {
-        $decoded = json_decode($output, true);
+        $decoded = $this->decodeJsonOutput($output);
 
         if (! is_array($decoded)) {
             return $output === '' ? [] : [$this->nonJsonIssue($output)];
