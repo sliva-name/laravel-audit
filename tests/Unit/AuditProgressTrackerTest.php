@@ -76,4 +76,18 @@ final class AuditProgressTrackerTest extends TestCase
         $this->assertSame($second, $active[0]['uuid'] ?? null);
         $this->assertSame('running', $active[0]['status'] ?? null);
     }
+
+    public function test_try_claim_transitions_queued_run_to_running(): void
+    {
+        $tracker = new AuditProgressTracker($this->directory);
+        $uuid = $tracker->create(new AuditOptions(noTools: true));
+
+        self::assertTrue($tracker->tryClaim($uuid));
+        self::assertFalse($tracker->tryClaim($uuid));
+
+        $run = $tracker->get($uuid);
+
+        self::assertSame('running', $run['status'] ?? null);
+        self::assertContains('Starting audit...', $run['log'] ?? []);
+    }
 }

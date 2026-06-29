@@ -105,6 +105,82 @@ final class PhpStanRunnerTest extends TestCase
         self::assertStringNotContainsString('larastan/larastan/extension.neon', $configContents);
     }
 
+    public function test_maps_json_file_messages_to_audit_issues(): void
+    {
+        $basePath = $this->makeProject(<<<'PHP'
+            #!/usr/bin/env php
+            <?php
+
+            echo json_encode([
+                'files' => [
+                    'app/Foo.php' => [
+                        'messages' => [
+                            [
+                                'message' => 'Access to undefined property.',
+                                'line' => 12,
+                                'identifier' => 'property.notFound',
+                            ],
+                        ],
+                    ],
+                ],
+            ]);
+            PHP);
+
+        mkdir($basePath.'/app', 0777, true);
+
+        $result = (new PhpStanRunner)->run($basePath, [
+            'binary' => 'vendor/bin/phpstan',
+            'arguments' => ['analyse', '--error-format=json'],
+            'paths' => ['app'],
+            'auto_larastan' => false,
+        ]);
+
+        self::assertCount(1, $result->issues);
+        self::assertSame('property.notFound', $result->issues[0]->ruleId);
+        self::assertSame('app/Foo.php', $result->issues[0]->location->file);
+        self::assertSame(12, $result->issues[0]->location->line);
+    }
+
+    public function test_treats_clean_json_report_as_success_with_no_issues(): void
+    {
+        $basePath = $this->makeProject(<<<'PHP'
+            #!/usr/bin/env php
+            <?php
+
+            echo json_encode([
+                'totals' => ['errors' => 0, 'file_errors' => 0],
+                'files' => [],
+            ]);
+            PHP);
+
+        mkdir($basePath.'/app', 0777, true);
+
+        $result = (new PhpStanRunner)->run($basePath, [
+            'binary' => 'vendor/bin/phpstan',
+            'arguments' => ['analyse', '--error-format=json'],
+            'paths' => ['app'],
+            'auto_larastan' => false,
+        ]);
+
+        self::assertSame([], $result->issues);
+    }
+
+    public function test_surfaces_missing_binary_as_tooling_issue(): void
+    {
+        $basePath = sys_get_temp_dir().'/laravel-audit-phpstan-missing-'.bin2hex(random_bytes(6));
+        mkdir($basePath.'/app', 0777, true);
+
+        $result = (new PhpStanRunner)->run($basePath, [
+            'binary' => 'vendor/bin/phpstan',
+            'arguments' => ['analyse', '--error-format=json'],
+            'paths' => ['app'],
+            'auto_larastan' => false,
+        ]);
+
+        self::assertFalse($result->available);
+        self::assertSame('tooling.phpstan.runner', $result->issues[0]->ruleId);
+    }
+
     private function makeProject(?string $binaryContents = null, bool $withLarastan = false): string
     {
         $basePath = sys_get_temp_dir().'/laravel-audit-phpstan-runner-'.bin2hex(random_bytes(6));
