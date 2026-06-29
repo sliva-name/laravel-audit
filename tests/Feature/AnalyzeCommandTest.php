@@ -61,4 +61,20 @@ final class AnalyzeCommandTest extends TestCase
             fn (string $ruleId): bool => str_starts_with($ruleId, 'security.'),
         ));
     }
+
+    public function test_analyze_command_excludes_other_categories_when_only_is_set(): void
+    {
+        Artisan::call('audit:analyze', [
+            '--no-tools' => true,
+            '--only' => 'performance',
+            '--format' => 'json',
+            '--fail-on' => 'critical',
+        ]);
+
+        /** @var array<string, mixed> $payload */
+        $payload = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+        $ruleIds = array_column($payload['issues'] ?? [], 'ruleId');
+
+        self::assertNotContains('security.mass-assignment', $ruleIds);
+    }
 }

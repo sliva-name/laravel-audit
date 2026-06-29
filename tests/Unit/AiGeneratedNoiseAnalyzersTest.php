@@ -119,6 +119,109 @@ final class AiGeneratedNoiseAnalyzersTest extends TestCase
         self::assertRuleFound('code-quality.redundant-else-after-exit', $issues);
     }
 
+    public function test_does_not_flag_direct_boolean_return(): void
+    {
+        $issues = (new RedundantBooleanReturnAnalyzer)->analyze($this->context(<<<'PHP'
+            <?php
+
+            final class Example
+            {
+                public function allowed(bool $active): bool
+                {
+                    return $active;
+                }
+            }
+            PHP));
+
+        self::assertNoIssues($issues);
+    }
+
+    public function test_does_not_flag_null_coalesce_on_nullable_parameter(): void
+    {
+        $issues = (new RedundantNullCoalesceAnalyzer)->analyze($this->context(<<<'PHP'
+            <?php
+
+            final class Example
+            {
+                public function handle(?array $items): array
+                {
+                    return $items ?? [];
+                }
+            }
+            PHP));
+
+        self::assertNoIssues($issues);
+    }
+
+    public function test_does_not_flag_foreach_without_redundant_empty_guard(): void
+    {
+        $issues = (new RedundantEmptyForeachGuardAnalyzer)->analyze($this->context(<<<'PHP'
+            <?php
+
+            final class Example
+            {
+                public function handle(array $items): void
+                {
+                    foreach ($items as $item) {
+                        echo $item;
+                    }
+                }
+            }
+            PHP));
+
+        self::assertNoIssues($issues);
+    }
+
+    public function test_does_not_flag_catch_that_wraps_exception(): void
+    {
+        $issues = (new RedundantCatchRethrowAnalyzer)->analyze($this->context(<<<'PHP'
+            <?php
+
+            final class Example
+            {
+                public function handle(Service $service): void
+                {
+                    try {
+                        $service->run();
+                    } catch (Throwable $exception) {
+                        throw new RuntimeException('Service failed', previous: $exception);
+                    }
+                }
+            }
+            PHP));
+
+        self::assertNoIssues($issues);
+    }
+
+    public function test_does_not_flag_if_without_redundant_else(): void
+    {
+        $issues = (new RedundantElseAfterExitAnalyzer)->analyze($this->context(<<<'PHP'
+            <?php
+
+            final class Example
+            {
+                public function label(bool $failed): string
+                {
+                    if ($failed) {
+                        return 'failed';
+                    }
+
+                    return 'ok';
+                }
+            }
+            PHP));
+
+        self::assertNoIssues($issues);
+    }
+
+    /**
+     * @param  list<Issue>  $issues
+     */
+    private static function assertNoIssues(array $issues): void
+    {
+        self::assertSame([], $issues);
+    }
+
     private function context(string $contents): AnalysisContext
     {
         return new AnalysisContext(

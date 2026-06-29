@@ -141,6 +141,32 @@ final class PatternInferenceEngineTest extends TestCase
         ));
     }
 
+    public function test_does_not_suggest_patterns_for_simple_methods_below_threshold(): void
+    {
+        $project = new ProjectIndex([
+            $this->phpFile(<<<'PHP'
+                <?php
+
+                final class HealthCheck
+                {
+                    public function ping(): string
+                    {
+                        return 'ok';
+                    }
+                }
+                PHP),
+        ], []);
+
+        $engine = new PatternInferenceEngine(
+            new MethodFeatureExtractor,
+            PatternModel::fromPath(__DIR__.'/../../resources/pattern-model.json'),
+        );
+
+        $suggestions = $engine->infer($project, [], 0.95, 5);
+
+        self::assertSame([], $suggestions);
+    }
+
     private function phpFile(string $contents, string $relativePath = 'app/Example.php'): PhpFile
     {
         $ast = (new ParserFactory)->createForNewestSupportedVersion()->parse($contents) ?? [];

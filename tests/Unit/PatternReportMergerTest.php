@@ -105,6 +105,25 @@ final class PatternReportMergerTest extends TestCase
         self::assertSame('refuted', $merged[0]['source'] ?? null);
     }
 
+    public function test_leaves_all_heuristics_when_no_review_results_are_provided(): void
+    {
+        $merged = PatternReportMerger::merge(
+            [
+                [
+                    'hypothesisKey' => 'action:app/Http/Controllers/UserController.php::store',
+                    'pattern' => 'action',
+                    'source' => 'heuristic',
+                    'title' => 'Action / Use Case',
+                ],
+            ],
+            [],
+            ['action:app/Http/Controllers/UserController.php::store'],
+        );
+
+        self::assertCount(1, $merged);
+        self::assertSame('heuristic', $merged[0]['source'] ?? null);
+    }
+
     /**
      * @return list<array<string, mixed>>
      */

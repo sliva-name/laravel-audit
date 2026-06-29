@@ -100,6 +100,25 @@ final class MassAssignmentAnalyzerTest extends TestCase
         self::assertNoIssues($issues);
     }
 
+    public function test_does_not_flag_model_with_both_fillable_and_guarded(): void
+    {
+        $issues = (new MassAssignmentAnalyzer)->analyze($this->modelContext(<<<'PHP'
+            <?php
+
+            namespace App\Models;
+
+            use Illuminate\Database\Eloquent\Model;
+
+            final class User extends Model
+            {
+                protected $fillable = ['name'];
+                protected $guarded = ['id'];
+            }
+            PHP));
+
+        self::assertNoIssues($issues);
+    }
+
     private function modelContext(string $contents): AnalysisContext
     {
         return $this->analysisContext($contents, 'app/Models/User.php');

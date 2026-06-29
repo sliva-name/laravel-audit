@@ -62,6 +62,25 @@ final class AuditEngineTest extends TestCase
         self::assertContains('Finalizing report', $updates);
     }
 
+    public function test_run_skips_disabled_analyzers(): void
+    {
+        $this->app['config']->set('laravel-audit.rules', [
+            'security.mass-assignment' => false,
+        ]);
+
+        $this->seedSecurityFixture();
+
+        $report = $this->app->make(AuditEngine::class)->run(new AuditOptions(
+            categories: [Category::Security->value],
+            noTools: true,
+        ));
+
+        self::assertNotContains(
+            'security.mass-assignment',
+            array_map(fn ($issue) => $issue->ruleId, $report->issues),
+        );
+    }
+
     private function seedSecurityFixture(): void
     {
         $modelsPath = $this->app->basePath().'/app/Models';
