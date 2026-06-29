@@ -85,6 +85,8 @@ final class MethodFeatureExtractor
             'magic_string_comparisons' => (float) $this->countMagicStringComparisons($finder, $statements),
             'direct_model_returns' => (float) $this->countDirectModelReturns($finder, $statements),
             'resource_wrapped_returns' => (float) $this->countResourceWrappedReturns($finder, $statements),
+            'inertia_renders' => (float) $this->countInertiaRenders($finder, $statements),
+            'mutating_db_calls' => (float) $this->countMutatingDbCalls($finder, $statements),
         ];
     }
 
@@ -268,14 +270,119 @@ final class MethodFeatureExtractor
                 continue;
             }
 
-            if ($return->expr instanceof Node\Expr\Variable || $return->expr instanceof Node\Expr\StaticCall || $return->expr instanceof Node\Expr\MethodCall) {
-                if (! $this->isResourceExpression($return->expr)) {
+            if ($this->isWebResponseExpression($return->expr) || $this->isResourceExpression($return->expr)) {
+                continue;
+            }
+
+            if ($return->expr instanceof Node\Expr\Variable
+                || $return->expr instanceof Node\Expr\StaticCall
+                || $return->expr instanceof Node\Expr\MethodCall
+                || $return->expr instanceof Node\Expr\Array_) {
+                $count++;
+            }
+        }
+
+        return $count;
+    }
+
+    /**
+     * @param  list<Node\Stmt>  $statements
+     */
+    private function countInertiaRenders(NodeFinder $finder, array $statements): int
+    {
+        $count = 0;
+
+        foreach ($finder->findInstanceOf($statements, Node\Expr\StaticCall::class) as $call) {
+            if ($this->isInertiaRenderCall($call)) {
+                $count++;
+            }
+        }
+
+        return $count;
+    }
+
+    /**
+     * @param  list<Node\Stmt>  $statements
+     */
+    private function countMutatingDbCalls(NodeFinder $finder, array $statements): int
+    {
+        $count = 0;
+
+        foreach ($finder->findInstanceOf($statements, Node\Expr\StaticCall::class) as $call) {
+            if ($call->class instanceof Node\Name && strtoupper($call->class->toString()) === 'DB') {
+                if ($call->name instanceof Node\Identifier
+                    && in_array(strtolower($call->name->toString()), [
+                        'insert', 'update', 'delete', 'statement', 'unprepared', 'affectingStatement',
+                    ], true)) {
                     $count++;
                 }
             }
         }
 
+        foreach ($finder->findInstanceOf($statements, Node\Expr\MethodCall::class) as $call) {
+            if ($call->name instanceof Node\Identifier && in_array(strtolower($call->name->toString()), [
+                'insert', 'update', 'delete', 'create', 'increment', 'decrement', 'upsert', 'forceDelete', 'save',
+            ], true)) {
+                $count++;
+            }
+        }
+
         return $count;
+    }
+
+    private function isInertiaRenderCall(Node\Expr\StaticCall $call): bool
+    {
+        if (! $call->class instanceof Node\Name || ! $call->name instanceof Node\Identifier) {
+            return false;
+        }
+
+        return str_contains(strtolower($call->class->toString()), 'inertia')
+            && strtolower($call->name->toString()) === 'render';
+    }
+
+    private function isWebResponseExpression(Node\Expr $expression): bool
+    {
+        if ($expression instanceof Node\Expr\MethodCall) {
+            if ($expression->name instanceof Node\Identifier) {
+                $name = strtolower($expression->name->toString());
+
+                if (in_array($name, [
+                    'back', 'redirect', 'with', 'witherrors', 'withinput', 'route', 'away', 'secure',
+                    'guest', 'intended', 'to', 'action', 'view', 'download', 'stream', 'file',
+                ], true)) {
+                    return true;
+                }
+            }
+
+            return $this->isWebResponseExpression($expression->var);
+        }
+
+        if ($expression instanceof Node\Expr\StaticCall) {
+            if ($this->isInertiaRenderCall($expression)) {
+                return true;
+            }
+
+            if ($expression->class instanceof Node\Name) {
+                $class = strtolower($expression->class->toString());
+
+                if (in_array($class, ['redirect', 'redirector'], true)) {
+                    return true;
+                }
+            }
+
+            if ($expression->name instanceof Node\Identifier
+                && in_array(strtolower($expression->name->toString()), ['route', 'back', 'view', 'away'], true)) {
+                return true;
+            }
+        }
+
+        if ($expression instanceof Node\Expr\FuncCall && $expression->name instanceof Node\Name) {
+            return in_array(strtolower($expression->name->toString()), [
+                'view', 'redirect', 'abort', 'inertia', 'to_route', 'back',
+            ], true);
+        }
+
+        return false;
     }
 
     /**

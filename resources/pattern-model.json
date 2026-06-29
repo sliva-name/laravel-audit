@@ -17,7 +17,9 @@
         "pipeline_usages": { "max": 3 },
         "magic_string_comparisons": { "max": 8 },
         "direct_model_returns": { "max": 3 },
-        "resource_wrapped_returns": { "max": 3 }
+        "resource_wrapped_returns": { "max": 3 },
+        "inertia_renders": { "max": 2 },
+        "mutating_db_calls": { "max": 4 }
     },
     "patterns": {
         "strategy": {
@@ -38,21 +40,26 @@
             "bias": -1.8,
             "weights": {
                 "lines": 1.8,
-                "db_calls": 1.6,
-                "validate_calls": 1.2,
+                "db_calls": 1.4,
+                "mutating_db_calls": 2.2,
+                "validate_calls": 1.5,
                 "return_statements": 0.8,
-                "is_controller_method": 2.5
+                "is_controller_method": 2.5,
+                "inertia_renders": -1.0
             }
         },
         "repository": {
             "title": "Repository",
             "description": "Isolate persistence queries behind a dedicated repository layer.",
             "recommendation": "Move query builder and Eloquent access into a repository consumed by actions or services.",
-            "bias": -1.6,
+            "bias": -1.4,
             "weights": {
-                "db_calls": 2.4,
+                "db_calls": 2.0,
                 "lines": 1.0,
-                "is_controller_method": 1.8
+                "is_controller_method": 1.5,
+                "mutating_db_calls": -2.5,
+                "validate_calls": -1.5,
+                "return_statements": -0.8
             }
         },
         "value_object": {
@@ -149,7 +156,8 @@
             "weights": {
                 "is_controller_method": 2.2,
                 "direct_model_returns": 2.6,
-                "resource_wrapped_returns": -3.0
+                "resource_wrapped_returns": -3.0,
+                "inertia_renders": -3.5
             }
         }
     },
@@ -170,7 +178,8 @@
             "action": 0.12
         },
         "best-practices.missing-form-request": {
-            "form_request": 0.15
+            "form_request": 0.22,
+            "action": 0.06
         },
         "best-practices.silent-failure": {
             "extract_method": 0.05

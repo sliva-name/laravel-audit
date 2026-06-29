@@ -259,6 +259,11 @@ Static analysis hypothesis:
 Observed structure (facts only, not conclusions):
 {$signals}
 
+Pattern-specific rules:
+- api_resource applies only when the method returns raw Eloquent models or collections as JSON/API responses (e.g. response()->json(\$model)). Inertia::render(), redirect(), back(), and view() are web responses, not API resources.
+- repository is for isolating read queries. action is for orchestration with validation, writes, or multi-step workflows. Read-only Inertia pages with simple queries rarely need repository.
+- form_request applies when inline \$request->validate() should move to a dedicated Form Request class.
+
 Your task:
 1. Read the method source code below
 2. Confirm or reject the hypothesis using evidence from the code
@@ -344,6 +349,12 @@ PROMPT;
         foreach ($features as $name => $value) {
             if ($name === 'is_controller_method') {
                 $lines[] = '- controller_method: '.($value >= 1.0 ? 'yes' : 'no');
+
+                continue;
+            }
+
+            if ($name === 'inertia_renders' && $value >= 1.0) {
+                $lines[] = '- inertia_renders: yes (web/Inertia stack, not JSON API)';
 
                 continue;
             }

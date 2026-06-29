@@ -36,12 +36,33 @@ final class PatternInferenceEngine
             }
         }
 
+        $suggestions = $this->topPatternPerMethod($suggestions);
+
         usort(
             $suggestions,
             fn (PatternSuggestion $left, PatternSuggestion $right): int => $right->confidence <=> $left->confidence,
         );
 
         return array_slice($suggestions, 0, $limit);
+    }
+
+    /**
+     * @param  list<PatternSuggestion>  $suggestions
+     * @return list<PatternSuggestion>
+     */
+    private function topPatternPerMethod(array $suggestions): array
+    {
+        $byMethod = [];
+
+        foreach ($suggestions as $suggestion) {
+            $key = $suggestion->file.'::'.$suggestion->method;
+
+            if (! isset($byMethod[$key]) || $suggestion->confidence > $byMethod[$key]->confidence) {
+                $byMethod[$key] = $suggestion;
+            }
+        }
+
+        return array_values($byMethod);
     }
 
     /**

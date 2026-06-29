@@ -204,6 +204,80 @@ final class PatternInferenceEngineTest extends TestCase
         self::assertSame([], $suggestions);
     }
 
+    public function test_does_not_suggest_api_resource_for_inertia_controller_with_back_returns(): void
+    {
+        $project = new ProjectIndex([
+            $this->phpFile(<<<'PHP'
+                <?php
+
+                namespace App\Http\Controllers;
+
+                use Inertia\Inertia;
+
+                final class CartController
+                {
+                    public function store(): mixed
+                    {
+                        $request->validate(['sku' => 'required']);
+
+                        if ($invalid) {
+                            return back()->with('error', 'nope');
+                        }
+
+                        Producto::create(['sku' => 'abc']);
+
+                        return back()->with('message', 'ok');
+                    }
+                }
+                PHP, 'app/Http/Controllers/CartController.php'),
+        ], []);
+
+        $engine = new PatternInferenceEngine(
+            new MethodFeatureExtractor,
+            PatternModel::fromPath(__DIR__.'/../../resources/pattern-model.json'),
+        );
+
+        $suggestions = $engine->infer($project, [], 0.55, 10);
+        $patterns = array_map(fn ($suggestion) => $suggestion->pattern, $suggestions);
+
+        self::assertNotContains('api_resource', $patterns);
+    }
+
+    public function test_keeps_only_top_pattern_per_method(): void
+    {
+        $project = new ProjectIndex([
+            $this->phpFile(<<<'PHP'
+                <?php
+
+                namespace App\Http\Controllers;
+
+                use Illuminate\Support\Facades\DB;
+
+                final class OrderController
+                {
+                    public function store(): void
+                    {
+                        DB::table('orders')->insert(['total' => 100]);
+                        DB::table('order_items')->insert(['sku' => 'abc']);
+                        DB::table('inventory')->where('sku', 'abc')->decrement('qty');
+                        DB::table('audit_logs')->insert(['event' => 'order.created']);
+                        DB::table('customers')->where('id', 1)->update(['last_order_at' => now()]);
+                    }
+                }
+                PHP, 'app/Http/Controllers/OrderController.php'),
+        ], []);
+
+        $engine = new PatternInferenceEngine(
+            new MethodFeatureExtractor,
+            PatternModel::fromPath(__DIR__.'/../../resources/pattern-model.json'),
+        );
+
+        $suggestions = $engine->infer($project, [], 0.50, 20);
+        $methods = array_map(fn ($suggestion) => $suggestion->method, $suggestions);
+
+        self::assertSame(array_unique($methods), $methods);
+    }
+
     private function phpFile(string $contents, string $relativePath = 'app/Example.php'): PhpFile
     {
         $ast = (new ParserFactory)->createForNewestSupportedVersion()->parse($contents) ?? [];
