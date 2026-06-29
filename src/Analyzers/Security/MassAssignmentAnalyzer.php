@@ -10,10 +10,15 @@ use LaravelAudit\Analysis\Category;
 use LaravelAudit\Analysis\Issue;
 use LaravelAudit\Analysis\Severity;
 use LaravelAudit\Analyzers\BaseAnalyzer;
+use LaravelAudit\Analyzers\Support\EloquentModelPropertyReader;
 use LaravelAudit\Project\PhpFile;
 
 final class MassAssignmentAnalyzer extends BaseAnalyzer implements AnalyzerInterface
 {
+    public function __construct(
+        private readonly EloquentModelPropertyReader $propertyReader = new EloquentModelPropertyReader,
+    ) {}
+
     public function id(): string
     {
         return 'security.mass-assignment';
@@ -32,11 +37,9 @@ final class MassAssignmentAnalyzer extends BaseAnalyzer implements AnalyzerInter
         $issues = [];
 
         foreach ($context->project->models() as $file) {
-            $hasFillable = str_contains($file->contents, '$fillable');
-            $hasGuarded = str_contains($file->contents, '$guarded');
-            $emptyGuardedMatches = $this->matchingLines($file, '/protected\s+\$guarded\s*=\s*\[\s*\]/');
+            $properties = $this->propertyReader->read($file);
 
-            if (! $hasFillable && ! $hasGuarded) {
+            if (! $properties['hasFillable'] && ! $properties['hasGuarded']) {
                 $issues[] = $this->issue(
                     $this->id(),
                     $this->category(),
@@ -51,7 +54,7 @@ final class MassAssignmentAnalyzer extends BaseAnalyzer implements AnalyzerInter
                 continue;
             }
 
-            foreach ($emptyGuardedMatches as $match) {
+            if ($properties['hasEmptyGuarded']) {
                 $issues[] = $this->issue(
                     $this->id(),
                     $this->category(),
@@ -59,12 +62,12 @@ final class MassAssignmentAnalyzer extends BaseAnalyzer implements AnalyzerInter
                     'Model allows unrestricted mass assignment',
                     'An empty $guarded array permits mass assignment for every column.',
                     $file,
-                    $match['line'],
+                    $properties['guardedLine'] ?? 1,
                     'Replace empty $guarded with a narrow $fillable list for request-driven writes.',
                 );
             }
 
-            if ($hasGuarded && ! $hasFillable && $emptyGuardedMatches === []) {
+            if ($properties['hasGuarded'] && ! $properties['hasFillable'] && ! $properties['hasEmptyGuarded']) {
                 $issues[] = $this->guardedWithoutFillableIssue($file);
             }
         }

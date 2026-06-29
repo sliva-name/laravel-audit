@@ -80,6 +80,11 @@ final class MethodFeatureExtractor
             'try_catch_blocks' => (float) count($finder->findInstanceOf($statements, Node\Stmt\TryCatch::class)),
             'foreach_loops' => (float) count($finder->findInstanceOf($statements, Node\Stmt\Foreach_::class)),
             'is_controller_method' => $this->isControllerMethod($file) ? 1.0 : 0.0,
+            'authorize_calls' => (float) $this->countAuthorizeCalls($finder, $statements),
+            'pipeline_usages' => (float) $this->countPipelineUsages($finder, $statements),
+            'magic_string_comparisons' => (float) $this->countMagicStringComparisons($finder, $statements),
+            'direct_model_returns' => (float) $this->countDirectModelReturns($finder, $statements),
+            'resource_wrapped_returns' => (float) $this->countResourceWrappedReturns($finder, $statements),
         ];
     }
 
@@ -171,5 +176,140 @@ final class MethodFeatureExtractor
     {
         return str_contains($file->relativePath, 'Http/Controllers')
             || str_contains($file->relativePath, 'Http\\Controllers');
+    }
+
+    /**
+     * @param  list<Node\Stmt>  $statements
+     */
+    private function countAuthorizeCalls(NodeFinder $finder, array $statements): int
+    {
+        $count = 0;
+
+        foreach ($finder->findInstanceOf($statements, Node\Expr\MethodCall::class) as $call) {
+            if ($call->name instanceof Node\Identifier && strtolower($call->name->toString()) === 'authorize') {
+                $count++;
+            }
+        }
+
+        foreach ($finder->findInstanceOf($statements, Node\Expr\StaticCall::class) as $call) {
+            if ($call->class instanceof Node\Name
+                && strtoupper($call->class->toString()) === 'GATE'
+                && $call->name instanceof Node\Identifier
+                && in_array(strtolower($call->name->toString()), ['authorize', 'allows', 'denies'], true)) {
+                $count++;
+            }
+        }
+
+        return $count;
+    }
+
+    /**
+     * @param  list<Node\Stmt>  $statements
+     */
+    private function countPipelineUsages(NodeFinder $finder, array $statements): int
+    {
+        $count = 0;
+
+        foreach ($finder->findInstanceOf($statements, Node\Expr\StaticCall::class) as $call) {
+            if ($call->class instanceof Node\Name
+                && str_contains(strtolower($call->class->toString()), 'pipeline')
+                && $call->name instanceof Node\Identifier
+                && strtolower($call->name->toString()) === 'send') {
+                $count++;
+            }
+        }
+
+        foreach ($finder->findInstanceOf($statements, Node\Expr\MethodCall::class) as $call) {
+            if ($call->name instanceof Node\Identifier && in_array(strtolower($call->name->toString()), ['through', 'pipe', 'then'], true)) {
+                $count++;
+            }
+        }
+
+        return $count;
+    }
+
+    /**
+     * @param  list<Node\Stmt>  $statements
+     */
+    private function countMagicStringComparisons(NodeFinder $finder, array $statements): int
+    {
+        $count = 0;
+
+        foreach ($finder->findInstanceOf($statements, Node\Expr\BinaryOp::class) as $comparison) {
+            if (! $comparison instanceof Node\Expr\BinaryOp\Equal && ! $comparison instanceof Node\Expr\BinaryOp\Identical) {
+                continue;
+            }
+
+            if ($comparison->left instanceof Node\Scalar\String_ || $comparison->right instanceof Node\Scalar\String_) {
+                $count++;
+            }
+        }
+
+        foreach ($finder->findInstanceOf($statements, Node\Stmt\Switch_::class) as $switch) {
+            foreach ($switch->cases as $case) {
+                if ($case->cond instanceof Node\Scalar\String_) {
+                    $count++;
+                }
+            }
+        }
+
+        return $count;
+    }
+
+    /**
+     * @param  list<Node\Stmt>  $statements
+     */
+    private function countDirectModelReturns(NodeFinder $finder, array $statements): int
+    {
+        $count = 0;
+
+        foreach ($finder->findInstanceOf($statements, Node\Stmt\Return_::class) as $return) {
+            if ($return->expr === null) {
+                continue;
+            }
+
+            if ($return->expr instanceof Node\Expr\Variable || $return->expr instanceof Node\Expr\StaticCall || $return->expr instanceof Node\Expr\MethodCall) {
+                if (! $this->isResourceExpression($return->expr)) {
+                    $count++;
+                }
+            }
+        }
+
+        return $count;
+    }
+
+    /**
+     * @param  list<Node\Stmt>  $statements
+     */
+    private function countResourceWrappedReturns(NodeFinder $finder, array $statements): int
+    {
+        $count = 0;
+
+        foreach ($finder->findInstanceOf($statements, Node\Stmt\Return_::class) as $return) {
+            if ($return->expr !== null && $this->isResourceExpression($return->expr)) {
+                $count++;
+            }
+        }
+
+        return $count;
+    }
+
+    private function isResourceExpression(Node\Expr $expression): bool
+    {
+        if ($expression instanceof Node\Expr\StaticCall
+            && $expression->name instanceof Node\Identifier
+            && in_array(strtolower($expression->name->toString()), ['collection', 'make'], true)) {
+            return true;
+        }
+
+        if ($expression instanceof Node\Expr\New_
+            && $expression->class instanceof Node\Name
+            && str_contains($expression->class->toString(), 'Resource')) {
+            return true;
+        }
+
+        return $expression instanceof Node\Expr\FuncCall
+            && $expression->name instanceof Node\Name
+            && strtolower($expression->name->toString()) === 'response';
     }
 }

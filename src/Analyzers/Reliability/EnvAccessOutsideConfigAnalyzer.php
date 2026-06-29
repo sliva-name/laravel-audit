@@ -31,7 +31,7 @@ final class EnvAccessOutsideConfigAnalyzer extends BaseAnalyzer implements Analy
         $issues = [];
 
         foreach ($context->project->phpFiles as $file) {
-            if ($file->inDirectory('config')) {
+            if ($file->inDirectory('config') || $file->inDirectory('tests')) {
                 continue;
             }
 

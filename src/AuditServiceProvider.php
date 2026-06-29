@@ -6,6 +6,7 @@ namespace LaravelAudit;
 
 use Illuminate\Support\ServiceProvider;
 use LaravelAudit\Analysis\AnalyzerRegistry;
+use LaravelAudit\Analyzers\BestPractices\DebugStatementAnalyzer;
 use LaravelAudit\Analyzers\BestPractices\FatControllerAnalyzer;
 use LaravelAudit\Analyzers\BestPractices\LogicInRoutesAnalyzer;
 use LaravelAudit\Analyzers\BestPractices\MissingFormRequestAnalyzer;
@@ -34,6 +35,7 @@ use LaravelAudit\Analyzers\Security\HardcodedCredentialsAnalyzer;
 use LaravelAudit\Analyzers\Security\MassAssignmentAnalyzer;
 use LaravelAudit\Analyzers\Security\RawSqlAnalyzer;
 use LaravelAudit\Analyzers\Security\UnguardedModelAnalyzer;
+use LaravelAudit\Analyzers\Security\UnvalidatedMassCreateAnalyzer;
 use LaravelAudit\Analyzers\Security\WeakValidationAnalyzer;
 use LaravelAudit\Audit\AuditEngine;
 use LaravelAudit\Audit\AuditProgressTracker;
@@ -150,6 +152,7 @@ final class AuditServiceProvider extends ServiceProvider
                 new EvalUsageAnalyzer,
                 new HardcodedCredentialsAnalyzer,
                 new UnguardedModelAnalyzer,
+                new UnvalidatedMassCreateAnalyzer,
                 new NPlusOneCandidateAnalyzer,
                 new SyncHeavyJobAnalyzer,
                 new MissingTransactionAnalyzer,
@@ -159,6 +162,7 @@ final class AuditServiceProvider extends ServiceProvider
                 new FatControllerAnalyzer,
                 new LogicInRoutesAnalyzer,
                 new SilentFailureAnalyzer,
+                new DebugStatementAnalyzer,
                 new LongMethodAnalyzer,
                 new LargeClassAnalyzer,
                 new NestingDepthAnalyzer,

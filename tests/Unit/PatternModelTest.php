@@ -24,6 +24,25 @@ final class PatternModelTest extends TestCase
         self::assertGreaterThan($flatGuard, $deepGuard);
     }
 
+    public function test_scores_enum_pattern_for_magic_string_comparisons(): void
+    {
+        $model = PatternModel::fromPath(__DIR__.'/../../resources/pattern-model.json');
+
+        $withStrings = $model->score($this->features([
+            'magic_string_comparisons' => 6.0,
+            'switch_branches' => 4.0,
+        ]));
+        $withoutStrings = $model->score($this->features([
+            'magic_string_comparisons' => 0.0,
+            'switch_branches' => 0.0,
+        ]));
+
+        self::assertGreaterThan(
+            $this->confidenceFor($withoutStrings, 'enum'),
+            $this->confidenceFor($withStrings, 'enum'),
+        );
+    }
+
     /**
      * @param  array<string, float>  $values
      */

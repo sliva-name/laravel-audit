@@ -119,6 +119,27 @@ final class MassAssignmentAnalyzerTest extends TestCase
         self::assertNoIssues($issues);
     }
 
+    public function test_does_not_treat_fillable_mentions_in_comments_as_policy(): void
+    {
+        $issues = (new MassAssignmentAnalyzer)->analyze($this->modelContext(<<<'PHP'
+            <?php
+
+            namespace App\Models;
+
+            use Illuminate\Database\Eloquent\Model;
+
+            /**
+             * Document $fillable for readers.
+             */
+            final class User extends Model
+            {
+            }
+            PHP));
+
+        self::assertCount(1, $issues);
+        self::assertSame('Model has no mass assignment policy', $issues[0]->title);
+    }
+
     private function modelContext(string $contents): AnalysisContext
     {
         return $this->analysisContext($contents, 'app/Models/User.php');

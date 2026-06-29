@@ -331,6 +331,7 @@ LARAVEL_AUDIT_DASHBOARD_STORAGE=file
 | `security.eval-usage` | `eval()` usage |
 | `security.hardcoded-credentials` | Hardcoded secrets |
 | `security.unguarded-model` | `Model::unguard()` usage |
+| `security.unvalidated-mass-create` | `Model::create($request->all())` without validation |
 
 ### Performance
 
@@ -355,6 +356,7 @@ LARAVEL_AUDIT_DASHBOARD_STORAGE=file
 | `best-practices.fat-controller` | Oversized controllers |
 | `best-practices.logic-in-routes` | Business logic in route closures |
 | `best-practices.silent-failure` | Empty catch blocks / swallowed errors |
+| `best-practices.debug-statement` | `dd()`, `dump()`, and similar debug helpers in app code |
 
 ### Code quality
 
@@ -397,6 +399,10 @@ Known patterns:
 - `extract_method`
 - `dependency_injection`
 - `form_request`
+- `policy`
+- `pipeline`
+- `enum`
+- `api_resource`
 
 Output uses `source: heuristic`. Existing audit findings can boost pattern scores (`finding_boosts` in the model file).
 

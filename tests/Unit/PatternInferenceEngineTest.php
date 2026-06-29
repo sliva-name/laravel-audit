@@ -18,7 +18,7 @@ use PhpParser\ParserFactory;
 
 final class PatternInferenceEngineTest extends TestCase
 {
-    public function test_suggests_strategy_for_switch_dispatch(): void
+    public function test_suggests_strategy_for_type_dispatch(): void
     {
         $project = new ProjectIndex([
             $this->phpFile(<<<'PHP'
@@ -26,24 +26,18 @@ final class PatternInferenceEngineTest extends TestCase
 
                 final class PaymentProcessor
                 {
-                    public function handle(string $type): void
+                    public function handle(object $payment): void
                     {
-                        switch ($type) {
-                            case 'card':
-                                $this->chargeCard();
-                                break;
-                            case 'paypal':
-                                $this->chargePaypal();
-                                break;
-                            case 'bank':
-                                $this->chargeBank();
-                                break;
-                            case 'wallet':
-                                $this->chargeWallet();
-                                break;
-                            case 'crypto':
-                                $this->chargeCrypto();
-                                break;
+                        if ($payment instanceof CardPayment) {
+                            $this->chargeCard($payment);
+                        } elseif ($payment instanceof PaypalPayment) {
+                            $this->chargePaypal($payment);
+                        } elseif ($payment instanceof BankPayment) {
+                            $this->chargeBank($payment);
+                        } elseif ($payment instanceof WalletPayment) {
+                            $this->chargeWallet($payment);
+                        } elseif ($payment instanceof CryptoPayment) {
+                            $this->chargeCrypto($payment);
                         }
                     }
                 }
@@ -59,6 +53,49 @@ final class PatternInferenceEngineTest extends TestCase
 
         self::assertNotSame([], $suggestions);
         self::assertSame('strategy', $suggestions[0]->pattern);
+    }
+
+    public function test_suggests_enum_for_switch_with_magic_strings(): void
+    {
+        $project = new ProjectIndex([
+            $this->phpFile(<<<'PHP'
+                <?php
+
+                final class OrderStatusHandler
+                {
+                    public function handle(string $status): void
+                    {
+                        switch ($status) {
+                            case 'pending':
+                                $this->markPending();
+                                break;
+                            case 'paid':
+                                $this->markPaid();
+                                break;
+                            case 'shipped':
+                                $this->markShipped();
+                                break;
+                            case 'delivered':
+                                $this->markDelivered();
+                                break;
+                            case 'cancelled':
+                                $this->markCancelled();
+                                break;
+                        }
+                    }
+                }
+                PHP),
+        ], []);
+
+        $engine = new PatternInferenceEngine(
+            new MethodFeatureExtractor,
+            PatternModel::fromPath(__DIR__.'/../../resources/pattern-model.json'),
+        );
+
+        $suggestions = $engine->infer($project, [], 0.55, 5);
+
+        self::assertNotSame([], $suggestions);
+        self::assertSame('enum', $suggestions[0]->pattern);
     }
 
     public function test_boosts_action_when_fat_controller_finding_exists(): void

@@ -12,7 +12,12 @@
         "parameter_count": { "max": 8 },
         "return_statements": { "max": 8 },
         "try_catch_blocks": { "max": 3 },
-        "foreach_loops": { "max": 5 }
+        "foreach_loops": { "max": 5 },
+        "authorize_calls": { "max": 3 },
+        "pipeline_usages": { "max": 3 },
+        "magic_string_comparisons": { "max": 8 },
+        "direct_model_returns": { "max": 3 },
+        "resource_wrapped_returns": { "max": 3 }
     },
     "patterns": {
         "strategy": {
@@ -101,6 +106,51 @@
                 "validate_calls": 2.8,
                 "is_controller_method": 2.0
             }
+        },
+        "policy": {
+            "title": "Authorization Policy",
+            "description": "Move authorization checks into a dedicated policy or gate.",
+            "recommendation": "Extract authorization into a Policy class and call $this->authorize() before mutating models.",
+            "bias": -2.4,
+            "weights": {
+                "is_controller_method": 2.4,
+                "db_calls": 1.8,
+                "authorize_calls": -2.5
+            }
+        },
+        "pipeline": {
+            "title": "Pipeline",
+            "description": "Chain multi-step workflows through Laravel's pipeline instead of inline orchestration.",
+            "recommendation": "Extract sequential steps into pipe classes and run them with Pipeline::send()->through().",
+            "bias": -2.1,
+            "weights": {
+                "lines": 1.4,
+                "manual_instantiations": 1.6,
+                "db_calls": 1.0,
+                "pipeline_usages": -3.0
+            }
+        },
+        "enum": {
+            "title": "Backed Enum",
+            "description": "Replace repeated string status comparisons with a typed enum.",
+            "recommendation": "Introduce a backed enum for status/state values and compare against enum cases.",
+            "bias": -1.9,
+            "weights": {
+                "magic_string_comparisons": 2.8,
+                "switch_branches": 1.4,
+                "elseif_chain": 1.0
+            }
+        },
+        "api_resource": {
+            "title": "API Resource",
+            "description": "Wrap Eloquent results in API resources before returning JSON.",
+            "recommendation": "Return UserResource or Resource::collection() instead of raw models from controller actions.",
+            "bias": -2.0,
+            "weights": {
+                "is_controller_method": 2.2,
+                "direct_model_returns": 2.6,
+                "resource_wrapped_returns": -3.0
+            }
         }
     },
     "finding_boosts": {
@@ -127,6 +177,13 @@
         },
         "performance.n-plus-one-candidate": {
             "repository": 0.10
+        },
+        "security.unvalidated-mass-create": {
+            "form_request": 0.18,
+            "policy": 0.08
+        },
+        "security.mass-assignment": {
+            "form_request": 0.10
         }
     }
 }
