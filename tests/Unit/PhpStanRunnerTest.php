@@ -201,6 +201,23 @@ final class PhpStanRunnerTest extends TestCase
         self::assertSame([], $result->issues);
     }
 
+    public function test_reports_issue_when_phpstan_binary_is_missing(): void
+    {
+        $basePath = sys_get_temp_dir().'/laravel-audit-phpstan-missing-'.bin2hex(random_bytes(6));
+        mkdir($basePath.'/app', 0777, true);
+
+        $result = (new PhpStanRunner)->run($basePath, [
+            'binary' => 'vendor/bin/phpstan',
+            'arguments' => ['analyse', '--error-format=json'],
+            'paths' => ['app'],
+            'auto_larastan' => false,
+        ]);
+
+        self::assertFalse($result->available);
+        self::assertCount(1, $result->issues);
+        self::assertSame('tooling.phpstan.runner', $result->issues[0]->ruleId);
+    }
+
     public function test_parses_plain_text_result_cache_errors(): void
     {
         $basePath = $this->makeProject(<<<'PHP'

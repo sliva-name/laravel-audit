@@ -44,6 +44,80 @@ final class AuditProgressTracker
         ], 'Starting audit...');
     }
 
+    public function tryClaim(string $uuid): bool
+    {
+        $this->ensureDirectory();
+
+        $path = $this->pathFor($uuid);
+
+        if (! is_file($path)) {
+            return false;
+        }
+
+        $handle = fopen($path, 'r+');
+
+        if ($handle === false) {
+            return false;
+        }
+
+        try {
+            if (! flock($handle, LOCK_EX)) {
+                return false;
+            }
+
+            $contents = stream_get_contents($handle);
+
+            if (! is_string($contents) || trim($contents) === '') {
+                return false;
+            }
+
+            /** @var array<string, mixed>|null $current */
+            $current = json_decode($contents, true);
+
+            if (! is_array($current)) {
+                return false;
+            }
+
+            $status = (string) ($current['status'] ?? 'queued');
+
+            if (! in_array($status, ['queued', 'failed'], true)) {
+                return false;
+            }
+
+            $log = is_array($current['log'] ?? null) ? $current['log'] : [];
+            $logLine = 'Starting audit...';
+
+            if ($log === [] || $log[array_key_last($log)] !== $logLine) {
+                $log[] = $logLine;
+            }
+
+            $updated = [
+                ...$current,
+                'status' => 'running',
+                'message' => 'Starting audit...',
+                'error' => null,
+                'log' => $log,
+                'updated_at' => Carbon::now()->toIso8601String(),
+            ];
+
+            $encoded = json_encode($updated, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT);
+
+            ftruncate($handle, 0);
+            rewind($handle);
+
+            if (fwrite($handle, $encoded) === false) {
+                return false;
+            }
+
+            fflush($handle);
+
+            return true;
+        } finally {
+            flock($handle, LOCK_UN);
+            fclose($handle);
+        }
+    }
+
     public function update(string $uuid, AuditProgressUpdate $update): void
     {
         $this->patch($uuid, [
@@ -188,7 +262,7 @@ final class AuditProgressTracker
         $this->ensureDirectory();
 
         $path = $this->pathFor($uuid);
-        $written = file_put_contents($path, json_encode($data, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT));
+        $written = file_put_contents($path, json_encode($data, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT), LOCK_EX);
 
         if ($written === false) {
             throw new \RuntimeException("Unable to write audit run state to [{$path}].");

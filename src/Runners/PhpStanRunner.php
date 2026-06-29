@@ -8,6 +8,7 @@ use LaravelAudit\Analysis\Category;
 use LaravelAudit\Analysis\Issue;
 use LaravelAudit\Analysis\Location;
 use LaravelAudit\Analysis\Severity;
+use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
 
 final class PhpStanRunner extends AbstractProcessRunner
@@ -17,23 +18,40 @@ final class PhpStanRunner extends AbstractProcessRunner
     ) {}
 
     /**
-     * @param  array{binary?: string, arguments?: list<string>, paths?: list<string>, auto_larastan?: bool, level?: int}  $config
+     * @param  array{binary?: string, arguments?: list<string>, paths?: list<string>, auto_larastan?: bool, level?: int, timeout?: int}  $config
      */
     public function run(string $basePath, array $config): ToolResult
     {
         $binary = $config['binary'] ?? 'vendor/bin/phpstan';
+        $timeout = max(60, (int) ($config['timeout'] ?? 1800));
 
         try {
             $arguments = $this->arguments($basePath, $config);
             $cacheDirectory = $this->configurationFactory->cacheDirectory($basePath);
 
             if (! $this->binaryAvailable($basePath, $binary)) {
-                return new ToolResult('phpstan', false, 127, output: 'PHPStan binary was not found.');
+                return new ToolResult(
+                    'phpstan',
+                    false,
+                    127,
+                    issues: [$this->unavailableToolIssue('phpstan', $binary)],
+                    output: 'PHPStan binary was not found.',
+                );
             }
 
-            $process = $this->runProcess($basePath, $binary, $arguments, [
-                'TMPDIR' => $cacheDirectory.DIRECTORY_SEPARATOR.'tmp',
-            ]);
+            try {
+                $process = $this->runProcess($basePath, $binary, $arguments, [
+                    'TMPDIR' => $cacheDirectory.DIRECTORY_SEPARATOR.'tmp',
+                ], $timeout);
+            } catch (ProcessTimedOutException) {
+                return new ToolResult(
+                    'phpstan',
+                    true,
+                    124,
+                    issues: [$this->timedOutToolIssue('phpstan', $timeout)],
+                    output: 'PHPStan timed out after '.$timeout.' seconds.',
+                );
+            }
             $jsonOutput = $this->jsonOutputFromProcess($process);
             $output = trim($jsonOutput.PHP_EOL.$process->getErrorOutput());
 

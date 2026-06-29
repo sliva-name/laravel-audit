@@ -143,11 +143,19 @@ final class AuditPanelController extends Controller
 
         abort_if($keys === [], 422);
 
-        $this->reports->confirmPatternHypotheses($uuid, $keys, $this->engine);
+        $result = $this->reports->confirmPatternHypotheses($uuid, $keys, $this->engine);
+
+        $status = $result->reviewedCount === $result->requestedCount
+            ? 'Selected pattern hypotheses were reviewed by the LLM.'
+            : sprintf(
+                'LLM reviewed %d of %d selected hypotheses. Unreviewed hypotheses were kept unchanged.',
+                $result->reviewedCount,
+                $result->requestedCount,
+            );
 
         return redirect()
             ->route('laravel-audit.reports.show', $uuid)
-            ->with('status', 'Selected pattern hypotheses were sent to the LLM.');
+            ->with('status', $status);
     }
 
     public function runStatus(string $uuid): JsonResponse

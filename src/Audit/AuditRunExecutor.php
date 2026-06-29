@@ -25,8 +25,22 @@ final class AuditRunExecutor
 
         $status = (string) ($run['status'] ?? 'queued');
 
-        if ($status === 'completed' || $status === 'running') {
-            return $status === 'completed';
+        if ($status === 'completed') {
+            return true;
+        }
+
+        if ($status === 'running') {
+            return false;
+        }
+
+        if (! in_array($status, ['queued', 'failed'], true)) {
+            return false;
+        }
+
+        if (! $this->tracker->tryClaim($uuid)) {
+            $run = $this->tracker->get($uuid);
+
+            return $run !== null && ($run['status'] ?? '') === 'completed';
         }
 
         $options = $this->tracker->optionsFromRun($uuid);
@@ -38,8 +52,6 @@ final class AuditRunExecutor
         }
 
         @set_time_limit(0);
-
-        $this->tracker->markRunning($uuid);
 
         try {
             $report = $this->engine->run(

@@ -39,12 +39,30 @@ final class JsonHttpClient
 
         $response = file_get_contents($url, false, $context);
 
-        if ($response === false) {
+        if ($response === false || ! $this->responseSuccessful($http_response_header)) {
             return null;
         }
 
         $decoded = json_decode($response, true);
 
         return is_array($decoded) ? $decoded : null;
+    }
+
+    /**
+     * @param  list<string>  $headers
+     */
+    private function responseSuccessful(array $headers): bool
+    {
+        if ($headers === []) {
+            return false;
+        }
+
+        if (preg_match('/\s(\d{3})\s/', $headers[0], $matches) !== 1) {
+            return false;
+        }
+
+        $status = (int) $matches[1];
+
+        return $status >= 200 && $status < 300;
     }
 }

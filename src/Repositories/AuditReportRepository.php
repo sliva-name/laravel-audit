@@ -37,7 +37,7 @@ final class AuditReportRepository
     /**
      * @param  list<string>  $hypothesisKeys
      */
-    public function confirmPatternHypotheses(string $uuid, array $hypothesisKeys, AuditEngine $engine): AuditReportSnapshot
+    public function confirmPatternHypotheses(string $uuid, array $hypothesisKeys, AuditEngine $engine): PatternConfirmationResult
     {
         $snapshot = $this->store->findByUuid($uuid);
 
@@ -47,7 +47,12 @@ final class AuditReportRepository
 
         $payload = $snapshot->payload;
         $confirmed = $engine->confirmStoredReportPatterns($hypothesisKeys, $payload);
+        $updated = $this->store->mergePatternSuggestions($uuid, $confirmed, $hypothesisKeys);
 
-        return $this->store->mergePatternSuggestions($uuid, $confirmed, $hypothesisKeys);
+        return new PatternConfirmationResult(
+            snapshot: $updated,
+            requestedCount: count($hypothesisKeys),
+            reviewedCount: count($confirmed),
+        );
     }
 }

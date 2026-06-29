@@ -55,9 +55,13 @@ final class AuditEngine
         }
 
         if (! $options->noTools) {
+            $toolTimeout = max(60, (int) data_get($config, 'tools.timeout', 1800));
+
             if ((bool) data_get($config, 'tools.pint.enabled', true)) {
                 $this->progress('Running Pint', ++$step, $totalSteps);
-                $toolResults[] = $this->pint->run($basePath, data_get($config, 'tools.pint', []));
+                $pintConfig = data_get($config, 'tools.pint', []);
+                $pintConfig = is_array($pintConfig) ? [...$pintConfig, 'timeout' => $toolTimeout] : ['timeout' => $toolTimeout];
+                $toolResults[] = $this->pint->run($basePath, $pintConfig);
             }
 
             if ((bool) data_get($config, 'tools.phpstan.enabled', true)) {
@@ -66,9 +70,10 @@ final class AuditEngine
 
                 if (is_array($phpstanConfig)) {
                     $phpstanConfig['paths'] = $config['paths'] ?? [];
+                    $phpstanConfig['timeout'] = $toolTimeout;
                 }
 
-                $toolResults[] = $this->phpstan->run($basePath, is_array($phpstanConfig) ? $phpstanConfig : []);
+                $toolResults[] = $this->phpstan->run($basePath, is_array($phpstanConfig) ? $phpstanConfig : ['timeout' => $toolTimeout]);
             }
 
             foreach ($toolResults as $toolResult) {

@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace LaravelAudit\Runners;
 
+use LaravelAudit\Analysis\Category;
+use LaravelAudit\Analysis\Issue;
+use LaravelAudit\Analysis\Location;
+use LaravelAudit\Analysis\Severity;
 use Symfony\Component\Process\Process;
 
 abstract class AbstractProcessRunner
@@ -12,14 +16,19 @@ abstract class AbstractProcessRunner
      * @param  list<string>  $arguments
      * @param  array<string, string>  $environment
      */
-    protected function runProcess(string $basePath, string $binary, array $arguments, array $environment = []): Process
-    {
+    protected function runProcess(
+        string $basePath,
+        string $binary,
+        array $arguments,
+        array $environment = [],
+        ?int $timeout = null,
+    ): Process {
         $process = new Process(
             array_merge([$this->resolveBinary($basePath, $binary)], $arguments),
             $basePath,
             $environment !== [] ? $environment : null,
         );
-        $process->setTimeout(300);
+        $process->setTimeout($timeout ?? 1800);
         $process->run();
 
         return $process;
@@ -49,5 +58,31 @@ abstract class AbstractProcessRunner
         }
 
         return $candidate;
+    }
+
+    protected function unavailableToolIssue(string $tool, string $binary): Issue
+    {
+        return new Issue(
+            ruleId: 'tooling.'.$tool.'.runner',
+            category: Category::Tooling,
+            severity: Severity::Error,
+            title: ucfirst($tool).' is not available',
+            message: ucfirst($tool).' binary was not found at '.$binary.'.',
+            location: new Location('composer.json', 1),
+            recommendation: 'Install the tool with Composer dev dependencies or disable it in laravel-audit config.',
+        );
+    }
+
+    protected function timedOutToolIssue(string $tool, int $timeout): Issue
+    {
+        return new Issue(
+            ruleId: 'tooling.'.$tool.'.runner',
+            category: Category::Tooling,
+            severity: Severity::Error,
+            title: ucfirst($tool).' timed out',
+            message: ucfirst($tool).' exceeded the configured timeout of '.$timeout.' seconds.',
+            location: new Location('composer.json', 1),
+            recommendation: 'Increase LARAVEL_AUDIT_TOOL_TIMEOUT or reduce the analyzed paths.',
+        );
     }
 }

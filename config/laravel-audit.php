@@ -19,6 +19,7 @@ return [
     ],
 
     'tools' => [
+        'timeout' => (int) env('LARAVEL_AUDIT_TOOL_TIMEOUT', 1800),
         'pint' => [
             'enabled' => true,
             'binary' => env('LARAVEL_AUDIT_PINT_BINARY', 'vendor/bin/pint'),
