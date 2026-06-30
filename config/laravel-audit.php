@@ -93,6 +93,7 @@ return [
         'reliability.env-access-outside-config' => true,
         'reliability.global-variables' => true,
         'best-practices.missing-form-request' => true,
+        'best-practices.shared-form-request' => true,
         'best-practices.fat-controller' => true,
         'best-practices.logic-in-routes' => true,
         'best-practices.silent-failure' => true,

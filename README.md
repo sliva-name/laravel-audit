@@ -355,6 +355,7 @@ LARAVEL_AUDIT_DASHBOARD_STORAGE=file
 | Rule ID | Detects |
 |---------|---------|
 | `best-practices.missing-form-request` | Inline validation instead of Form Requests |
+| `best-practices.shared-form-request` | Same Form Request reused across multiple controller actions |
 | `best-practices.fat-controller` | Oversized controllers |
 | `best-practices.logic-in-routes` | Business logic in route closures |
 | `best-practices.silent-failure` | Empty catch blocks / swallowed errors |

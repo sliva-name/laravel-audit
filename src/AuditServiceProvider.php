@@ -10,6 +10,7 @@ use LaravelAudit\Analyzers\BestPractices\DebugStatementAnalyzer;
 use LaravelAudit\Analyzers\BestPractices\FatControllerAnalyzer;
 use LaravelAudit\Analyzers\BestPractices\LogicInRoutesAnalyzer;
 use LaravelAudit\Analyzers\BestPractices\MissingFormRequestAnalyzer;
+use LaravelAudit\Analyzers\BestPractices\SharedFormRequestAnalyzer;
 use LaravelAudit\Analyzers\BestPractices\SilentFailureAnalyzer;
 use LaravelAudit\Analyzers\CodeQuality\LargeClassAnalyzer;
 use LaravelAudit\Analyzers\CodeQuality\LongMethodAnalyzer;
@@ -162,6 +163,7 @@ final class AuditServiceProvider extends ServiceProvider
                 new EnvAccessOutsideConfigAnalyzer,
                 new GlobalVariablesAnalyzer,
                 new MissingFormRequestAnalyzer,
+                new SharedFormRequestAnalyzer,
                 new FatControllerAnalyzer,
                 new LogicInRoutesAnalyzer,
                 new SilentFailureAnalyzer,
