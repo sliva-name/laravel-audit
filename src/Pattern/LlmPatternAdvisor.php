@@ -81,6 +81,10 @@ final class LlmPatternAdvisor implements PatternAdvisorInterface
                 continue;
             }
 
+            if ($this->shouldSkipFormRequestReview($hypothesis)) {
+                continue;
+            }
+
             $snippet = $this->snippetExtractor->extract($file, $hypothesis->method, $hypothesis->line);
 
             if ($snippet === null || trim($snippet) === '') {
@@ -263,6 +267,9 @@ Pattern-specific rules:
 - api_resource applies only when the method returns raw Eloquent models or collections as JSON/API responses (e.g. response()->json(\$model)). Inertia::render(), redirect(), back(), and view() are web responses, not API resources.
 - repository is for isolating read queries. action is for orchestration with validation, writes, or multi-step workflows. Read-only Inertia pages with simple queries rarely need repository.
 - form_request applies when inline \$request->validate() should move to a dedicated Form Request class.
+- Do not suggest form_request when the method already type-hints a custom *Request class (not Illuminate\\Http\\Request).
+- Auth::validate() and Auth::guard()->validate() are credential checks, not inline form validation. Do not suggest form_request for those flows.
+- Return every JSON string field as a string, never as an array.
 
 Your task:
 1. Read the method source code below
@@ -328,11 +335,76 @@ PROMPT;
             is_string($message['reasoning_content'] ?? null) ? $message['reasoning_content'] : '',
         );
 
-        if ($decoded === null || ! $this->isValidLlmResult($decoded)) {
+        if ($decoded === null) {
+            return null;
+        }
+
+        $decoded = $this->normalizeLlmResult($decoded);
+
+        if (! $this->isValidLlmResult($decoded)) {
             return null;
         }
 
         return $decoded;
+    }
+
+    private function shouldSkipFormRequestReview(PatternSuggestion $hypothesis): bool
+    {
+        if ($hypothesis->pattern !== 'form_request') {
+            return false;
+        }
+
+        $features = $hypothesis->features;
+
+        if (($features['typed_form_request'] ?? 0.0) >= 1.0) {
+            return true;
+        }
+
+        return ($features['inline_request_validate'] ?? 0.0) < 1.0;
+    }
+
+    /**
+     * @param  array<string, mixed>  $result
+     * @return array<string, mixed>
+     */
+    private function normalizeLlmResult(array $result): array
+    {
+        foreach (['title', 'description', 'recommendation', 'rationale'] as $field) {
+            $normalized = $this->normalizeStringField($result[$field] ?? null);
+
+            if ($normalized !== null) {
+                $result[$field] = $normalized;
+            }
+        }
+
+        return $result;
+    }
+
+    private function normalizeStringField(mixed $value): ?string
+    {
+        if (is_string($value)) {
+            $trimmed = trim($value);
+
+            return $trimmed === '' ? null : $trimmed;
+        }
+
+        if (! is_array($value)) {
+            return null;
+        }
+
+        $parts = [];
+
+        foreach ($value as $item) {
+            if (is_string($item) && trim($item) !== '') {
+                $parts[] = trim($item);
+            }
+        }
+
+        if ($parts === []) {
+            return null;
+        }
+
+        return implode("\n", $parts);
     }
 
     /**

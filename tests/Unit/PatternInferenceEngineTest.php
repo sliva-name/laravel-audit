@@ -387,6 +387,79 @@ final class PatternInferenceEngineTest extends TestCase
         self::assertSame('action', $suggestions[0]->pattern);
     }
 
+    public function test_does_not_suggest_form_request_when_method_uses_typed_form_request(): void
+    {
+        $relativePath = 'app/Http/Controllers/Admin/ProductoController.php';
+        $project = new ProjectIndex([
+            $this->phpFile(<<<'PHP'
+                <?php
+
+                namespace App\Http\Controllers\Admin;
+
+                use App\Http\Requests\StoreProductoRequest;
+
+                final class ProductoController
+                {
+                    public function update(StoreProductoRequest $request): mixed
+                    {
+                        $data = $request->validated();
+                        $request->producto->update($data);
+
+                        return redirect('/');
+                    }
+                }
+                PHP, $relativePath),
+        ], []);
+
+        $engine = new PatternInferenceEngine(
+            new MethodFeatureExtractor,
+            PatternModel::fromPath(__DIR__.'/../../resources/pattern-model.json'),
+        );
+
+        $suggestions = $engine->infer($project, [], 0.55, 5);
+        $patterns = array_map(fn ($suggestion) => $suggestion->pattern, $suggestions);
+
+        self::assertNotContains('form_request', $patterns);
+    }
+
+    public function test_does_not_suggest_form_request_for_auth_guard_validate_only(): void
+    {
+        $relativePath = 'app/Http/Controllers/Auth/ConfirmablePasswordController.php';
+        $project = new ProjectIndex([
+            $this->phpFile(<<<'PHP'
+                <?php
+
+                namespace App\Http\Controllers\Auth;
+
+                use Illuminate\Http\Request;
+                use Illuminate\Support\Facades\Auth;
+
+                final class ConfirmablePasswordController
+                {
+                    public function store(Request $request): mixed
+                    {
+                        Auth::guard('web')->validate([
+                            'email' => $request->user()->email,
+                            'password' => $request->password,
+                        ]);
+
+                        return redirect('/');
+                    }
+                }
+                PHP, $relativePath),
+        ], []);
+
+        $engine = new PatternInferenceEngine(
+            new MethodFeatureExtractor,
+            PatternModel::fromPath(__DIR__.'/../../resources/pattern-model.json'),
+        );
+
+        $suggestions = $engine->infer($project, [], 0.55, 5);
+        $patterns = array_map(fn ($suggestion) => $suggestion->pattern, $suggestions);
+
+        self::assertNotContains('form_request', $patterns);
+    }
+
     private function phpFile(string $contents, string $relativePath = 'app/Example.php'): PhpFile
     {
         $ast = (new ParserFactory)->createForNewestSupportedVersion()->parse($contents) ?? [];

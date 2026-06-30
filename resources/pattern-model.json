@@ -20,7 +20,10 @@
         "resource_wrapped_returns": { "max": 3 },
         "inertia_renders": { "max": 2 },
         "mutating_db_calls": { "max": 4 },
-        "simple_form_handler": { "max": 1 }
+        "simple_form_handler": { "max": 1 },
+        "inline_request_validate": { "max": 3 },
+        "auth_guard_validate": { "max": 2 },
+        "typed_form_request": { "max": 1 }
     },
     "patterns": {
         "strategy": {
@@ -112,11 +115,13 @@
             "recommendation": "Create a Form Request with rules() and authorize() instead of validating inside the controller.",
             "bias": -1.4,
             "weights": {
-                "validate_calls": 3.2,
+                "inline_request_validate": 3.2,
                 "is_controller_method": 2.0,
                 "lines": -1.2,
                 "mutating_db_calls": -1.5,
-                "simple_form_handler": 2.8
+                "simple_form_handler": 2.8,
+                "typed_form_request": -4.0,
+                "auth_guard_validate": -3.0
             }
         },
         "policy": {

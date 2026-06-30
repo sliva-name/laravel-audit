@@ -83,6 +83,10 @@ final class PatternModel
      */
     private function confidence(MethodFeatures $features, string $patternId, array $pattern, array $ruleIds): float
     {
+        if ($patternId === 'form_request' && ! $this->isFormRequestCandidate($features)) {
+            return 0.0;
+        }
+
         $score = (float) ($pattern['bias'] ?? 0.0);
         $weights = $pattern['weights'] ?? [];
 
@@ -111,5 +115,14 @@ final class PatternModel
     private function sigmoid(float $score): float
     {
         return 1.0 / (1.0 + exp(-$score));
+    }
+
+    private function isFormRequestCandidate(MethodFeatures $features): bool
+    {
+        if (($features->values['typed_form_request'] ?? 0.0) >= 1.0) {
+            return false;
+        }
+
+        return ($features->values['inline_request_validate'] ?? 0.0) >= 1.0;
     }
 }

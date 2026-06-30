@@ -75,6 +75,9 @@ final class MethodFeatureExtractor
             'manual_instantiations' => (float) count($finder->findInstanceOf($statements, Node\Expr\New_::class)),
             'db_calls' => (float) $this->countDbCalls($finder, $statements),
             'validate_calls' => (float) $this->countValidateCalls($finder, $statements),
+            'inline_request_validate' => (float) $this->countInlineRequestValidateCalls($finder, $statements),
+            'auth_guard_validate' => (float) $this->countAuthGuardValidateCalls($finder, $statements),
+            'typed_form_request' => $this->hasTypedFormRequestParam($method) ? 1.0 : 0.0,
             'parameter_count' => (float) count($method->params),
             'return_statements' => (float) count($finder->findInstanceOf($statements, Node\Stmt\Return_::class)),
             'try_catch_blocks' => (float) count($finder->findInstanceOf($statements, Node\Stmt\TryCatch::class)),
@@ -101,7 +104,11 @@ final class MethodFeatureExtractor
         }
 
         $lines = $method->getEndLine() - $method->getStartLine() + 1;
-        $validateCalls = $this->countValidateCalls($finder, $statements);
+        if ($this->hasTypedFormRequestParam($method)) {
+            return 0.0;
+        }
+
+        $validateCalls = $this->countInlineRequestValidateCalls($finder, $statements);
         $mutatingDbCalls = $this->countMutatingDbCalls($finder, $statements);
         $returnStatements = count($finder->findInstanceOf($statements, Node\Stmt\Return_::class));
 
@@ -169,6 +176,111 @@ final class MethodFeatureExtractor
         }
 
         return $count;
+    }
+
+    /**
+     * @param  list<Node\Stmt>  $statements
+     */
+    private function countInlineRequestValidateCalls(NodeFinder $finder, array $statements): int
+    {
+        $count = 0;
+
+        foreach ($finder->findInstanceOf($statements, Node\Expr\MethodCall::class) as $call) {
+            if ($call->name instanceof Node\Identifier
+                && strtolower($call->name->toString()) === 'validate'
+                && $this->isRequestValidateReceiver($call->var)) {
+                $count++;
+            }
+        }
+
+        return $count;
+    }
+
+    /**
+     * @param  list<Node\Stmt>  $statements
+     */
+    private function countAuthGuardValidateCalls(NodeFinder $finder, array $statements): int
+    {
+        $count = 0;
+
+        foreach ($finder->findInstanceOf($statements, Node\Expr\MethodCall::class) as $call) {
+            if (! $call->name instanceof Node\Identifier || strtolower($call->name->toString()) !== 'validate') {
+                continue;
+            }
+
+            if ($this->isAuthGuardValidateReceiver($call->var)) {
+                $count++;
+            }
+        }
+
+        foreach ($finder->findInstanceOf($statements, Node\Expr\StaticCall::class) as $call) {
+            if ($call->class instanceof Node\Name
+                && strtoupper($call->class->toString()) === 'AUTH'
+                && $call->name instanceof Node\Identifier
+                && strtolower($call->name->toString()) === 'validate') {
+                $count++;
+            }
+        }
+
+        return $count;
+    }
+
+    private function hasTypedFormRequestParam(Node\Stmt\ClassMethod $method): bool
+    {
+        foreach ($method->params as $parameter) {
+            $type = $parameter->type;
+
+            if ($type instanceof Node\Name) {
+                $shortName = $type->getLast();
+
+                if ($shortName !== 'Request' && str_ends_with($shortName, 'Request')) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function isRequestValidateReceiver(Node\Expr $receiver): bool
+    {
+        if ($receiver instanceof Node\Expr\Variable
+            && is_string($receiver->name)
+            && strtolower($receiver->name) === 'request') {
+            return true;
+        }
+
+        return $receiver instanceof Node\Expr\FuncCall
+            && $receiver->name instanceof Node\Name
+            && strtolower($receiver->name->toString()) === 'request';
+    }
+
+    private function isAuthGuardValidateReceiver(Node\Expr $receiver): bool
+    {
+        if ($receiver instanceof Node\Expr\StaticCall
+            && $receiver->class instanceof Node\Name
+            && strtoupper($receiver->class->toString()) === 'AUTH'
+            && $receiver->name instanceof Node\Identifier
+            && strtolower($receiver->name->toString()) === 'validate') {
+            return true;
+        }
+
+        return $this->isAuthGuardCall($receiver);
+    }
+
+    private function isAuthGuardCall(Node\Expr $expression): bool
+    {
+        if (! $expression instanceof Node\Expr\StaticCall) {
+            return false;
+        }
+
+        if (! $expression->class instanceof Node\Name
+            || strtoupper($expression->class->toString()) !== 'AUTH') {
+            return false;
+        }
+
+        return $expression->name instanceof Node\Identifier
+            && strtolower($expression->name->toString()) === 'guard';
     }
 
     /**

@@ -155,6 +155,90 @@ final class MethodFeatureExtractorTest extends TestCase
         self::assertSame(0.0, $helperFeatures['direct_model_returns']);
     }
 
+    public function test_does_not_score_simple_form_handler_for_typed_form_request(): void
+    {
+        $features = $this->extractFeatures(<<<'PHP'
+            <?php
+
+            namespace App\Http\Controllers\Admin;
+
+            use App\Http\Requests\StoreProductoRequest;
+
+            final class ProductoController
+            {
+                public function update(StoreProductoRequest $request): mixed
+                {
+                    $data = $request->validated();
+                    $request->user()->update($data);
+
+                    return back();
+                }
+            }
+            PHP, 'app/Http/Controllers/Admin/ProductoController.php', 'update');
+
+        self::assertSame(1.0, $features['typed_form_request']);
+        self::assertSame(0.0, $features['simple_form_handler']);
+        self::assertSame(0.0, $features['inline_request_validate']);
+    }
+
+    public function test_does_not_score_simple_form_handler_for_auth_guard_validate(): void
+    {
+        $features = $this->extractFeatures(<<<'PHP'
+            <?php
+
+            namespace App\Http\Controllers\Auth;
+
+            use Illuminate\Http\Request;
+            use Illuminate\Support\Facades\Auth;
+
+            final class ConfirmablePasswordController
+            {
+                public function store(Request $request): mixed
+                {
+                    if (! Auth::guard('web')->validate([
+                        'email' => $request->user()->email,
+                        'password' => $request->password,
+                    ])) {
+                        throw new \Exception('invalid');
+                    }
+
+                    return redirect('/');
+                }
+            }
+            PHP, 'app/Http/Controllers/Auth/ConfirmablePasswordController.php', 'store');
+
+        self::assertSame(1.0, $features['auth_guard_validate']);
+        self::assertSame(0.0, $features['inline_request_validate']);
+        self::assertSame(0.0, $features['simple_form_handler']);
+    }
+
+    public function test_counts_inline_request_validate_separately_from_auth_validate(): void
+    {
+        $features = $this->extractFeatures(<<<'PHP'
+            <?php
+
+            namespace App\Http\Controllers;
+
+            use Illuminate\Http\Request;
+
+            final class PasswordController
+            {
+                public function update(Request $request): mixed
+                {
+                    $validated = $request->validate(['password' => 'required']);
+
+                    $request->user()->update(['password' => $validated['password']]);
+
+                    return back();
+                }
+            }
+            PHP, 'app/Http/Controllers/PasswordController.php', 'update');
+
+        self::assertSame(1.0, $features['inline_request_validate']);
+        self::assertSame(0.0, $features['auth_guard_validate']);
+        self::assertSame(1.0, $features['simple_form_handler']);
+    }
+
     /**
      * @return array<string, float>
      */
